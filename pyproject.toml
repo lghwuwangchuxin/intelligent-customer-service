@@ -1,0 +1,8 @@
+[project]
+name = "intelligent-customer-service"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "myapplication>=0.1.0",
+]
