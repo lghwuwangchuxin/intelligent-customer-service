@@ -25,6 +25,23 @@ from .agent import (
     AgentCapabilities,
     ToolExecuteRequest,
     ToolInfo,
+    # Conversation History
+    ConversationSummary,
+    ConversationListResponse,
+    InteractionDetail,
+    ConversationDetail,
+    UpdateConversationRequest,
+    ConversationExportResponse,
+    # Long-term Memory
+    UserPreferenceRequest,
+    UserPreferenceResponse,
+    EntityRequest,
+    EntityResponse,
+    KnowledgeRequest,
+    KnowledgeResponse,
+    MemorySearchRequest,
+    MemorySearchResponse,
+    MemoryStatsResponse,
 )
 from .system import (
     SystemInfoResponse,
@@ -59,6 +76,23 @@ __all__ = [
     "AgentCapabilities",
     "ToolExecuteRequest",
     "ToolInfo",
+    # Conversation History
+    "ConversationSummary",
+    "ConversationListResponse",
+    "InteractionDetail",
+    "ConversationDetail",
+    "UpdateConversationRequest",
+    "ConversationExportResponse",
+    # Long-term Memory
+    "UserPreferenceRequest",
+    "UserPreferenceResponse",
+    "EntityRequest",
+    "EntityResponse",
+    "KnowledgeRequest",
+    "KnowledgeResponse",
+    "MemorySearchRequest",
+    "MemorySearchResponse",
+    "MemoryStatsResponse",
     # System
     "SystemInfoResponse",
     "HealthResponse",

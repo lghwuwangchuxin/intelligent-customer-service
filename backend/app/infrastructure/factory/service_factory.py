@@ -8,6 +8,7 @@ making it easy to swap implementations and manage dependencies.
 import logging
 from typing import Any, Dict, Optional, Type, TypeVar
 
+from app.core.vector_store import VectorStoreManager
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ class ServiceFactory:
         llm_manager: "LLMManager",
         max_messages: Optional[int] = None,
         summary_threshold: Optional[int] = None,
+        persist_path: Optional[str] = None,
     ) -> "MemoryManager":
         """
         Create a Memory Manager instance.
@@ -202,6 +204,7 @@ class ServiceFactory:
             llm_manager: LLM Manager dependency
             max_messages: Maximum messages to keep
             summary_threshold: Threshold for summarization
+            persist_path: Path for persisting conversation memories
 
         Returns:
             Configured MemoryManager instance
@@ -213,7 +216,38 @@ class ServiceFactory:
             llm_manager=llm_manager,
             max_messages=max_messages or settings.AGENT_MEMORY_MAX_MESSAGES,
             summary_threshold=summary_threshold or settings.AGENT_MEMORY_SUMMARY_THRESHOLD,
+            persist_path=persist_path or getattr(settings, 'AGENT_MEMORY_PERSIST_PATH', None),
         )
+
+    @staticmethod
+    def create_store_manager(
+        store_type: Optional[str] = None,
+        storage_path: Optional[str] = None,
+    ) -> "StoreManager":
+        """
+        Create a Store Manager instance for long-term memory.
+
+        Args:
+            store_type: Type of store ("memory" or "persistent")
+            storage_path: Path for persistent storage
+
+        Returns:
+            Configured StoreManager instance
+        """
+        from app.agent.store import StoreManager, create_memory_store
+
+        # Get settings with fallbacks
+        store_type = store_type or getattr(settings, 'AGENT_STORE_TYPE', 'persistent')
+        storage_path = storage_path or getattr(settings, 'AGENT_STORE_PATH', './data/memory_store')
+
+        logger.debug(f"Creating StoreManager with type={store_type}, path={storage_path}")
+
+        store = create_memory_store(
+            store_type=store_type,
+            storage_path=storage_path,
+        )
+
+        return StoreManager(store)
 
     @staticmethod
     def create_react_agent(
@@ -249,6 +283,7 @@ class ServiceFactory:
         llm_manager: "LLMManager",
         tool_registry: "ToolRegistry",
         memory_manager: "MemoryManager",
+        store_manager: Optional["StoreManager"] = None,
         max_iterations: Optional[int] = None,
     ) -> Optional["LangGraphAgent"]:
         """
@@ -257,7 +292,8 @@ class ServiceFactory:
         Args:
             llm_manager: LLM Manager dependency
             tool_registry: Tool Registry dependency
-            memory_manager: Memory Manager dependency
+            memory_manager: Memory Manager dependency (short-term)
+            store_manager: Store Manager dependency (long-term memory)
             max_iterations: Maximum agent iterations
 
         Returns:
@@ -270,11 +306,12 @@ class ServiceFactory:
             return None
 
         try:
-            logger.debug("Creating LangGraphAgent")
+            logger.debug(f"Creating LangGraphAgent with store_manager={store_manager is not None}")
             return create_langgraph_agent(
                 llm_manager=llm_manager,
                 tool_registry=tool_registry,
                 memory_manager=memory_manager,
+                store_manager=store_manager,
                 max_iterations=max_iterations or settings.AGENT_MAX_ITERATIONS,
                 enable_planning=settings.AGENT_ENABLE_PLANNING,
                 enable_parallel_tools=settings.AGENT_ENABLE_PARALLEL_TOOLS,

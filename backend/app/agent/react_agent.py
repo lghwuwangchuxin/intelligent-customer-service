@@ -52,7 +52,6 @@ from app.utils.log_utils import (
     log_phase_end,
     log_step,
     log_substep,
-    log_tool_call,
     log_llm_call,
     log_timing_summary,
     log_memory_operation,
@@ -437,7 +436,6 @@ class ReActAgent:
             # Act: Execute the chosen tool - with tracing
             log_step(log_ctx, f"Iter{iteration}", f"步骤2: 执行 (Act) - 调用工具 [{action}]")
             agent_logger.log_action(action, action_input or {})
-            log_tool_call(log_ctx, action, "start", action_input)
 
             state = AgentStateManager.record_action(state, action, action_input or {})
 
@@ -474,11 +472,9 @@ class ReActAgent:
             # 记录工具调用结果
             if result.get("success"):
                 result_summary = str(result.get("result", ""))[:100]
-                log_tool_call(log_ctx, action, "success", result_summary=result_summary, elapsed_ms=duration_ms)
                 agent_logger.log_observation(action, True, result_summary, duration_ms)
             else:
                 error_msg = result.get("error", "Unknown error")
-                log_tool_call(log_ctx, action, "error", error=error_msg, elapsed_ms=duration_ms)
                 agent_logger.log_observation(action, False, error_msg, duration_ms)
 
             log_ctx.record_step_time(f"Tool_{action}_{iteration}", duration_ms)

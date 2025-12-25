@@ -87,35 +87,42 @@ class Settings(BaseSettings):
     HYBRID_SEARCH_TOP_K: int = 20  # Top K for initial retrieval before fusion
 
     # RAG Configuration (Basic)
-    RAG_CHUNK_SIZE: int = 500
-    RAG_CHUNK_OVERLAP: int = 50
+    RAG_CHUNK_SIZE: int = 512  # Optimized chunk size for Chinese text
+    RAG_CHUNK_OVERLAP: int = 100  # Increased overlap for better context
     RAG_TOP_K: int = 5
 
     # RAG Query Transformation
-    RAG_ENABLE_HYDE: bool = True  # HyDE (Hypothetical Document Embeddings)
-    RAG_ENABLE_QUERY_EXPANSION: bool = True  # Query Expansion
+    # 注意: HyDE 和 Query Expansion 会显著增加响应时间（每次额外 30-60 秒）
+    # 如果 LLM 响应较慢，建议禁用以提升用户体验
+    RAG_ENABLE_HYDE: bool = False  # HyDE (Hypothetical Document Embeddings) - 禁用以加速
+    RAG_ENABLE_QUERY_EXPANSION: bool = False  # Query Expansion - 禁用以加速
     RAG_QUERY_EXPANSION_NUM: int = 3  # Number of expanded queries
 
-    # RAG Hybrid Retrieval
+    # RAG Hybrid Retrieval - Optimized for better recall
     RAG_ENABLE_HYBRID: bool = True  # Enable hybrid retrieval (Vector + BM25)
-    RAG_VECTOR_WEIGHT: float = 0.7  # Weight for vector search results
-    RAG_BM25_WEIGHT: float = 0.3  # Weight for BM25 search results
-    RAG_RETRIEVAL_TOP_K: int = 10  # Top-K for initial retrieval
+    RAG_VECTOR_WEIGHT: float = 0.6  # Vector weight (lowered for better hybrid balance)
+    RAG_BM25_WEIGHT: float = 0.4  # BM25 weight (increased for keyword matching)
+    RAG_RETRIEVAL_TOP_K: int = 20  # Increased for better recall before reranking
 
     # RAG Reranking (Jina Reranker)
     RAG_ENABLE_RERANK: bool = True  # Enable reranking
     RAG_RERANK_MODEL: str = "jinaai/jina-reranker-v2-base-multilingual"
-    RAG_RERANK_TOP_N: int = 5  # Top-N after reranking
-    RAG_RERANK_SCORE_THRESHOLD: float = 0.3  # Minimum relevance score
+    RAG_RERANK_TOP_N: int = 8  # More results after reranking
+    RAG_RERANK_SCORE_THRESHOLD: float = 0.15  # Lower threshold to keep more results
 
     # RAG Post-processing
     RAG_ENABLE_DEDUP: bool = True  # Enable semantic deduplication
-    RAG_DEDUP_THRESHOLD: float = 0.95  # Similarity threshold for dedup
+    RAG_DEDUP_THRESHOLD: float = 0.92  # Slightly lower to allow more diverse results
     RAG_FINAL_TOP_K: int = 5  # Final number of results
 
     # RAG Document Processing
     RAG_USE_SEMANTIC_CHUNKING: bool = False  # Use semantic chunking (disabled for large docs)
     RAG_SEMANTIC_CHUNK_BUFFER_SIZE: int = 1  # Buffer size for semantic chunking
+
+    # RAG Evaluation & Quality
+    RAG_ENABLE_EVALUATION: bool = True  # Enable RAG quality evaluation
+    RAG_EVALUATION_LOG_LEVEL: str = "INFO"  # Evaluation logging level
+    RAG_MIN_RELEVANCE_SCORE: float = 0.1  # Minimum relevance score to consider
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/customer_service.db"
@@ -139,6 +146,19 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_PUBLIC_KEY: Optional[str] = None
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"  # or self-hosted URL
+
+    # ============ Logging Configuration ============
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    LOG_DIR: str = "./logs"  # Directory for log files
+    LOG_TO_CONSOLE: bool = True  # Output logs to console
+    LOG_TO_FILE: bool = True  # Output logs to file
+    LOG_JSON_FORMAT: bool = False  # Use JSON format for file logs
+    LOG_MAX_BYTES: int = 10 * 1024 * 1024  # Max file size before rotation (10MB)
+    LOG_BACKUP_COUNT: int = 30  # Number of backup files to keep
+    LOG_RAG_SEPARATE: bool = True  # Separate log file for RAG pipeline
+    LOG_AGENT_SEPARATE: bool = True  # Separate log file for Agent reasoning
+    LOG_RAGAS_SEPARATE: bool = True  # Separate log file for RAG quality evaluation
+    LOG_CLEANUP_DAYS: int = 30  # Days to keep old log files
 
     class Config:
         env_file = ".env"

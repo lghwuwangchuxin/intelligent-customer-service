@@ -42,6 +42,31 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# Logger 缓存 - 根据模块名获取对应的 logger
+_module_loggers: Dict[str, logging.Logger] = {}
+
+
+def get_module_logger(module: str) -> logging.Logger:
+    """
+    根据模块名获取对应的 logger。
+
+    这样可以确保日志被正确路由到对应的日志文件：
+    - "Agent" -> app.agent
+    - "RAG" -> app.rag
+    - 其他 -> app.utils.log_utils
+    """
+    if module not in _module_loggers:
+        module_lower = module.lower()
+        if module_lower == "agent":
+            _module_loggers[module] = logging.getLogger("app.agent")
+        elif module_lower == "rag":
+            _module_loggers[module] = logging.getLogger("app.rag")
+        elif module_lower == "ragas" or module_lower == "evaluator":
+            _module_loggers[module] = logging.getLogger("app.rag.ragas_evaluator")
+        else:
+            _module_loggers[module] = logging.getLogger(__name__)
+    return _module_loggers[module]
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 日志格式常量
@@ -114,13 +139,14 @@ def log_phase_start(
         input_summary: 输入摘要
     """
     prefix = ctx.get_prefix()
-    logger.info(f"{prefix} {SEPARATOR_HEAVY}")
-    logger.info(f"{prefix} {PHASE_START} {phase_name.upper()} 开始")
+    _logger = get_module_logger(ctx.module)
+    _logger.info(f"{prefix} {SEPARATOR_HEAVY}")
+    _logger.info(f"{prefix} {PHASE_START} {phase_name.upper()} 开始")
     if description:
-        logger.info(f"{prefix}   {description}")
+        _logger.info(f"{prefix}   {description}")
     if input_summary:
-        logger.info(f"{prefix}   输入: {input_summary[:100]}{'...' if len(input_summary) > 100 else ''}")
-    logger.info(f"{prefix} {SEPARATOR_LIGHT}")
+        _logger.info(f"{prefix}   输入: {input_summary[:100]}{'...' if len(input_summary) > 100 else ''}")
+    _logger.info(f"{prefix} {SEPARATOR_LIGHT}")
 
 
 def log_phase_end(
@@ -143,20 +169,21 @@ def log_phase_end(
         elapsed_ms: 耗时（毫秒）
     """
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     status = SUCCESS_MARKER if success else FAIL_MARKER
     elapsed = elapsed_ms or ctx.elapsed_ms()
 
-    logger.info(f"{prefix} {SEPARATOR_LIGHT}")
-    logger.info(f"{prefix} {PHASE_END} {phase_name.upper()} 完成 {status} ({elapsed:.0f}ms)")
+    _logger.info(f"{prefix} {SEPARATOR_LIGHT}")
+    _logger.info(f"{prefix} {PHASE_END} {phase_name.upper()} 完成 {status} ({elapsed:.0f}ms)")
 
     if metrics:
         metrics_str = ", ".join([f"{k}={v}" for k, v in metrics.items()])
-        logger.info(f"{prefix}   统计: {metrics_str}")
+        _logger.info(f"{prefix}   统计: {metrics_str}")
 
     if output_summary:
-        logger.info(f"{prefix}   输出: {output_summary[:100]}{'...' if len(output_summary) > 100 else ''}")
+        _logger.info(f"{prefix}   输出: {output_summary[:100]}{'...' if len(output_summary) > 100 else ''}")
 
-    logger.info(f"{prefix} {SEPARATOR_HEAVY}")
+    _logger.info(f"{prefix} {SEPARATOR_HEAVY}")
 
 
 def log_step(
@@ -177,6 +204,7 @@ def log_step(
         data: 附加数据
     """
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     full_message = f"{prefix} {STEP_MARKER} [{step_name}] {message}"
 
     if data:
@@ -185,7 +213,7 @@ def log_step(
             data_str = data_str[:200] + "..."
         full_message += f" | {data_str}"
 
-    log_func = getattr(logger, level, logger.info)
+    log_func = getattr(_logger, level, _logger.info)
     log_func(full_message)
 
 
@@ -197,7 +225,8 @@ def log_substep(
 ):
     """记录子步骤。"""
     prefix = ctx.get_prefix()
-    logger.info(f"{prefix}   {DEBUG_MARKER} [{step_name}:{substep}] {message}")
+    _logger = get_module_logger(ctx.module)
+    _logger.info(f"{prefix}   {DEBUG_MARKER} [{step_name}:{substep}] {message}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -207,8 +236,9 @@ def log_substep(
 def log_query_info(ctx: LogContext, query: str, query_type: str = "original"):
     """记录查询信息。"""
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     truncated = query[:80] + "..." if len(query) > 80 else query
-    logger.info(f"{prefix} {INFO_MARKER} 查询 ({query_type}): \"{truncated}\"")
+    _logger.info(f"{prefix} {INFO_MARKER} 查询 ({query_type}): \"{truncated}\"")
 
 
 def log_documents_retrieved(
@@ -219,11 +249,12 @@ def log_documents_retrieved(
 ):
     """记录检索到的文档信息。"""
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     msg = f"{prefix} {INFO_MARKER} 检索结果 [{source}]: {count} 个文档"
     if top_scores:
         scores_str = ", ".join([f"{s:.3f}" for s in top_scores[:3]])
         msg += f" | Top分数: [{scores_str}]"
-    logger.info(msg)
+    _logger.info(msg)
 
 
 def log_llm_call(
@@ -236,6 +267,7 @@ def log_llm_call(
 ):
     """记录 LLM 调用信息。"""
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     parts = [f"{prefix} {INFO_MARKER} LLM调用 [{operation}]"]
 
     if model:
@@ -247,7 +279,7 @@ def log_llm_call(
     if elapsed_ms:
         parts.append(f"耗时: {elapsed_ms:.0f}ms")
 
-    logger.info(" | ".join(parts))
+    _logger.info(" | ".join(parts))
 
 
 def log_tool_call(
@@ -261,19 +293,20 @@ def log_tool_call(
 ):
     """记录工具调用信息。"""
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
 
     if status == "start":
         params_str = json.dumps(params, ensure_ascii=False)[:100] if params else ""
-        logger.info(f"{prefix} {STEP_MARKER} 工具调用 [{tool_name}] 开始 | 参数: {params_str}")
+        _logger.info(f"{prefix} {STEP_MARKER} 工具调用 [{tool_name}] 开始 | 参数: {params_str}")
     elif status == "success":
         msg = f"{prefix} {SUCCESS_MARKER} 工具调用 [{tool_name}] 成功"
         if elapsed_ms:
             msg += f" ({elapsed_ms:.0f}ms)"
         if result_summary:
             msg += f" | 结果: {result_summary[:100]}"
-        logger.info(msg)
+        _logger.info(msg)
     elif status == "error":
-        logger.error(f"{prefix} {FAIL_MARKER} 工具调用 [{tool_name}] 失败 | 错误: {error}")
+        _logger.error(f"{prefix} {FAIL_MARKER} 工具调用 [{tool_name}] 失败 | 错误: {error}")
 
 
 def log_memory_operation(
@@ -285,12 +318,13 @@ def log_memory_operation(
 ):
     """记录记忆操作。"""
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     msg = f"{prefix} {INFO_MARKER} 记忆操作 [{operation}] 会话: {conversation_id[:8]}"
     if message_count is not None:
         msg += f" | 消息数: {message_count}"
     if has_summary:
         msg += " | 已摘要"
-    logger.info(msg)
+    _logger.info(msg)
 
 
 def log_scores_distribution(
@@ -303,6 +337,7 @@ def log_scores_distribution(
         return
 
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     import statistics
 
     stats = {
@@ -315,7 +350,7 @@ def log_scores_distribution(
         stats["std"] = statistics.stdev(scores)
 
     stats_str = " | ".join([f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in stats.items()])
-    logger.info(f"{prefix}   分数统计 [{step_name}]: {stats_str}")
+    _logger.info(f"{prefix}   分数统计 [{step_name}]: {stats_str}")
 
 
 def log_timing_summary(ctx: LogContext):
@@ -324,16 +359,17 @@ def log_timing_summary(ctx: LogContext):
         return
 
     prefix = ctx.get_prefix()
+    _logger = get_module_logger(ctx.module)
     total = ctx.elapsed_ms()
 
-    logger.info(f"{prefix} {SEPARATOR_DOT}")
-    logger.info(f"{prefix} 耗时汇总 (总计: {total}ms)")
+    _logger.info(f"{prefix} {SEPARATOR_DOT}")
+    _logger.info(f"{prefix} 耗时汇总 (总计: {total}ms)")
 
     for step, elapsed in ctx.step_times.items():
         percentage = (elapsed / total * 100) if total > 0 else 0
         bar_len = int(percentage / 5)  # 每 5% 一个字符
         bar = "█" * bar_len + "░" * (20 - bar_len)
-        logger.info(f"{prefix}   {step:20s} {elapsed:6.0f}ms ({percentage:5.1f}%) {bar}")
+        _logger.info(f"{prefix}   {step:20s} {elapsed:6.0f}ms ({percentage:5.1f}%) {bar}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -536,13 +572,14 @@ class AgentLogger:
         """记录思考过程。"""
         self.iteration = iteration
         prefix = self.ctx.get_prefix()
-        logger.info(f"{prefix} {SEPARATOR_LIGHT}")
-        logger.info(f"{prefix} 迭代 #{iteration}")
-        logger.info(f"{prefix}   思考: {thought[:100]}{'...' if len(thought) > 100 else ''}")
+        _logger = get_module_logger(self.ctx.module)
+        _logger.info(f"{prefix} {SEPARATOR_LIGHT}")
+        _logger.info(f"{prefix} 迭代 #{iteration}")
+        _logger.info(f"{prefix}   思考: {thought[:100]}{'...' if len(thought) > 100 else ''}")
         if action:
-            logger.info(f"{prefix}   决策: 执行工具 [{action}]")
+            _logger.info(f"{prefix}   决策: 执行工具 [{action}]")
         else:
-            logger.info(f"{prefix}   决策: 生成最终回答")
+            _logger.info(f"{prefix}   决策: 生成最终回答")
 
     def log_action(self, tool_name: str, params: Dict[str, Any]):
         """记录动作执行开始。"""

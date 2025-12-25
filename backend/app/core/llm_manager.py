@@ -148,7 +148,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== 默认配置 ====================
 
-DEFAULT_LLM_TIMEOUT = 120.0  # 默认超时时间（秒）
+DEFAULT_LLM_TIMEOUT = 300.0  # 默认超时时间（秒）- 本地 LLM 可能较慢
 DEFAULT_MAX_RETRIES = 3  # 默认最大重试次数
 DEFAULT_RETRY_DELAY = 1.0  # 默认重试延迟（秒）
 RETRYABLE_ERRORS = (
@@ -400,7 +400,7 @@ class LLMManager:
                     model=self.model,
                     base_url=self.base_url,
                     temperature=self.temperature,
-                    request_timeout=120.0,
+                    request_timeout=300.0,  # 本地 LLM 可能较慢，增加超时时间
                 )
             elif self.provider == "claude" and LLAMA_ANTHROPIC_AVAILABLE:
                 logger.info(f"[LLM] Initializing LlamaIndex Anthropic: {self.model}")

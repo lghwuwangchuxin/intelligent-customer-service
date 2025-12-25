@@ -179,20 +179,34 @@ class ToolRegistry:
 
         from config.settings import settings
 
-        # Knowledge base tools
-        if vector_store or rag_service:
-            from app.mcp.tools.knowledge import (
-                KnowledgeSearchTool,
-                KnowledgeAddTextTool,
-            )
-            if rag_service:
-                self.register(KnowledgeSearchTool(rag_service=rag_service))
-                self.register(KnowledgeAddTextTool(rag_service=rag_service))
+        # Knowledge base tools - register with both rag_service and vector_store for fallback
+        from app.mcp.tools.knowledge import (
+            KnowledgeSearchTool,
+            KnowledgeAddTextTool,
+            KnowledgeStatsTool,
+        )
 
-        # Web search tool
+        if rag_service or vector_store:
+            self.register(KnowledgeSearchTool(
+                rag_service=rag_service,
+                vector_store=vector_store
+            ))
+            logger.info("[ToolRegistry] Registered knowledge_search tool")
+
+        if rag_service:
+            self.register(KnowledgeAddTextTool(rag_service=rag_service))
+            logger.info("[ToolRegistry] Registered knowledge_add_text tool")
+
+        if vector_store:
+            self.register(KnowledgeStatsTool(vector_store=vector_store))
+            logger.info("[ToolRegistry] Registered knowledge_stats tool")
+
+        # Web search tools (Baidu search)
         if settings.MCP_WEB_SEARCH_ENABLED:
-            from app.mcp.tools.web_search import WebSearchTool
+            from app.mcp.tools.web_search import WebSearchTool, WebFetchTool
             self.register(WebSearchTool())
+            self.register(WebFetchTool())
+            logger.info("[ToolRegistry] Registered web_search and web_fetch tools (Baidu)")
 
         # Code execution tool
         if settings.MCP_CODE_EXECUTION_ENABLED:
@@ -200,9 +214,10 @@ class ToolRegistry:
             self.register(CodeExecutorTool(
                 timeout=settings.MCP_CODE_EXECUTION_TIMEOUT
             ))
+            logger.info("[ToolRegistry] Registered code_executor tool")
 
         self._initialized = True
-        logger.info(f"Initialized {len(self._tools)} default tools")
+        logger.info(f"[ToolRegistry] Initialized {len(self._tools)} default tools: {list(self._tools.keys())}")
 
 
 # Global registry instance

@@ -20,9 +20,11 @@ Memory Operations:
 └── DeleteMemory - 删除记忆
 ```
 """
+import json
 import logging
 import time
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -43,14 +45,41 @@ logger = logging.getLogger(__name__)
 _memory_logger = MemoryLogger()
 
 
+class AgentInteraction(BaseModel):
+    """Record of a single agent interaction (question-answer pair)."""
+    interaction_id: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    question: str
+    response: str
+    thoughts: List[Dict[str, Any]] = Field(default_factory=list)
+    tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
+    iterations: int = 0
+    duration_ms: int = 0
+    error: Optional[str] = None
+
+
 class ConversationMemory(BaseModel):
     """Memory for a single conversation."""
     conversation_id: str
+    title: Optional[str] = None  # Auto-generated from first message
     messages: List[Dict[str, str]] = Field(default_factory=list)
+    interactions: List[AgentInteraction] = Field(default_factory=list)  # Detailed interaction history
     summary: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: Dict = Field(default_factory=dict)
+
+    def generate_title(self) -> str:
+        """Generate a title from the first user message."""
+        for msg in self.messages:
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                # Take first 50 chars as title
+                title = content[:50].strip()
+                if len(content) > 50:
+                    title += "..."
+                return title
+        return f"对话 {self.conversation_id[:8]}"
 
     def add_message(self, role: str, content: str) -> None:
         """Add a message to memory."""
@@ -112,6 +141,7 @@ class MemoryManager:
         max_messages: int = 50,
         summary_threshold: int = 20,
         keep_recent: int = 10,
+        persist_path: Optional[str] = None,
     ):
         """
         Initialize memory manager.
@@ -121,12 +151,20 @@ class MemoryManager:
             max_messages: Maximum messages before truncation.
             summary_threshold: Trigger summarization at this count.
             keep_recent: Number of recent messages to keep after summarization.
+            persist_path: Optional path for persisting memories to disk.
         """
         self.llm_manager = llm_manager
         self.max_messages = max_messages
         self.summary_threshold = summary_threshold
         self.keep_recent = keep_recent
         self._memories: Dict[str, ConversationMemory] = {}
+
+        # Setup persistence
+        self.persist_path: Optional[Path] = None
+        if persist_path:
+            self.persist_path = Path(persist_path)
+            self.persist_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[Memory] 持久化存储路径: {self.persist_path}")
 
     def get_or_create(self, conversation_id: str) -> ConversationMemory:
         """Get existing memory or create new one."""
@@ -356,3 +394,225 @@ class MemoryManager:
             f"消息数: {len(memory.messages)} | 有摘要: {memory.summary is not None}"
         )
         return memory
+
+    async def add_interaction(
+        self,
+        conversation_id: str,
+        interaction_id: str,
+        question: str,
+        response: str,
+        thoughts: List[Dict[str, Any]] = None,
+        tool_calls: List[Dict[str, Any]] = None,
+        iterations: int = 0,
+        duration_ms: int = 0,
+        error: Optional[str] = None,
+    ) -> None:
+        """
+        Add a complete agent interaction to memory.
+
+        Args:
+            conversation_id: Conversation identifier.
+            interaction_id: Unique interaction ID.
+            question: User's question.
+            response: Agent's response.
+            thoughts: List of thinking steps.
+            tool_calls: List of tool calls made.
+            iterations: Number of reasoning iterations.
+            duration_ms: Total duration in milliseconds.
+            error: Error message if any.
+        """
+        memory = self.get_or_create(conversation_id)
+
+        interaction = AgentInteraction(
+            interaction_id=interaction_id,
+            question=question,
+            response=response,
+            thoughts=thoughts or [],
+            tool_calls=tool_calls or [],
+            iterations=iterations,
+            duration_ms=duration_ms,
+            error=error,
+        )
+
+        memory.interactions.append(interaction)
+        memory.updated_at = datetime.utcnow()
+
+        # Auto-generate title from first interaction
+        if not memory.title and question:
+            memory.title = question[:50].strip()
+            if len(question) > 50:
+                memory.title += "..."
+
+        logger.info(
+            f"[Memory] 添加交互记录 | 会话: {conversation_id[:8]} | "
+            f"交互ID: {interaction_id[:8]} | 迭代: {iterations} | "
+            f"工具调用: {len(tool_calls or [])} | 耗时: {duration_ms}ms"
+        )
+
+        # Persist if enabled
+        if self.persist_path:
+            await self._persist_memory(memory)
+
+    def get_interactions(
+        self,
+        conversation_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[AgentInteraction]:
+        """
+        Get interaction history for a conversation.
+
+        Args:
+            conversation_id: Conversation identifier.
+            limit: Maximum number of interactions to return.
+            offset: Number of interactions to skip.
+
+        Returns:
+            List of interactions.
+        """
+        memory = self.get_memory(conversation_id)
+        if not memory:
+            return []
+
+        interactions = memory.interactions[offset:offset + limit]
+        logger.debug(
+            f"[Memory] 获取交互历史 | 会话: {conversation_id[:8]} | "
+            f"返回: {len(interactions)} 条 | 总计: {len(memory.interactions)} 条"
+        )
+        return interactions
+
+    def list_conversations(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "updated_at",
+        descending: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        List all conversations with summary info.
+
+        Args:
+            limit: Maximum number of conversations to return.
+            offset: Number of conversations to skip.
+            sort_by: Field to sort by (created_at, updated_at).
+            descending: Sort in descending order.
+
+        Returns:
+            List of conversation summaries.
+        """
+        conversations = []
+
+        for conv_id, memory in self._memories.items():
+            conversations.append({
+                "conversation_id": conv_id,
+                "title": memory.title or memory.generate_title(),
+                "message_count": len(memory.messages),
+                "interaction_count": len(memory.interactions),
+                "has_summary": memory.summary is not None,
+                "created_at": memory.created_at.isoformat(),
+                "updated_at": memory.updated_at.isoformat(),
+                "last_message": memory.messages[-1] if memory.messages else None,
+            })
+
+        # Sort
+        if sort_by in ("created_at", "updated_at"):
+            conversations.sort(
+                key=lambda x: x[sort_by],
+                reverse=descending,
+            )
+
+        # Paginate
+        result = conversations[offset:offset + limit]
+
+        logger.info(
+            f"[Memory] 列出对话 | 返回: {len(result)} 条 | "
+            f"总计: {len(conversations)} 条 | 排序: {sort_by} {'DESC' if descending else 'ASC'}"
+        )
+
+        return result
+
+    def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed conversation information.
+
+        Args:
+            conversation_id: Conversation identifier.
+
+        Returns:
+            Detailed conversation data or None.
+        """
+        memory = self.get_memory(conversation_id)
+        if not memory:
+            return None
+
+        return {
+            "conversation_id": conversation_id,
+            "title": memory.title or memory.generate_title(),
+            "messages": memory.messages,
+            "interactions": [
+                {
+                    "interaction_id": i.interaction_id,
+                    "timestamp": i.timestamp.isoformat(),
+                    "question": i.question,
+                    "response": i.response,
+                    "thoughts": i.thoughts,
+                    "tool_calls": i.tool_calls,
+                    "iterations": i.iterations,
+                    "duration_ms": i.duration_ms,
+                    "error": i.error,
+                }
+                for i in memory.interactions
+            ],
+            "summary": memory.summary,
+            "message_count": len(memory.messages),
+            "interaction_count": len(memory.interactions),
+            "created_at": memory.created_at.isoformat(),
+            "updated_at": memory.updated_at.isoformat(),
+            "metadata": memory.metadata,
+        }
+
+    async def _persist_memory(self, memory: ConversationMemory) -> None:
+        """Persist memory to disk."""
+        if not self.persist_path:
+            return
+
+        try:
+            file_path = self.persist_path / f"{memory.conversation_id}.json"
+            data = memory.model_dump(mode="json")
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+            logger.debug(f"[Memory] 持久化记忆 | 会话: {memory.conversation_id[:8]} | 文件: {file_path}")
+        except Exception as e:
+            logger.error(f"[Memory] 持久化失败 | 会话: {memory.conversation_id[:8]} | 错误: {e}")
+
+    async def load_persisted_memories(self) -> int:
+        """Load all persisted memories from disk."""
+        if not self.persist_path or not self.persist_path.exists():
+            return 0
+
+        loaded = 0
+        for file_path in self.persist_path.glob("*.json"):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                memory = ConversationMemory(**data)
+                self._memories[memory.conversation_id] = memory
+                loaded += 1
+            except Exception as e:
+                logger.error(f"[Memory] 加载记忆失败 | 文件: {file_path} | 错误: {e}")
+
+        logger.info(f"[Memory] 加载持久化记忆完成 | 加载: {loaded} 条")
+        return loaded
+
+    def update_conversation_title(self, conversation_id: str, title: str) -> bool:
+        """Update the title of a conversation."""
+        memory = self.get_memory(conversation_id)
+        if not memory:
+            return False
+
+        memory.title = title
+        memory.updated_at = datetime.utcnow()
+        logger.info(f"[Memory] 更新对话标题 | 会话: {conversation_id[:8]} | 新标题: {title[:30]}")
+        return True

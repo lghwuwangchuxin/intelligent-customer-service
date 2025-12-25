@@ -357,23 +357,42 @@ class KnowledgeSearchTool(BaseMCPTool):
 
     async def _vector_search(self, query: str, top_k: int) -> List[dict]:
         """Execute vector similarity search."""
-        try:
-            if self.rag_service:
-                # Use RAG service for search (sync method, run in thread pool)
+        docs = []
+
+        # Try RAG service first
+        if self.rag_service:
+            try:
+                logger.debug(f"[KnowledgeSearch] Using RAG service for query: {query[:30]}...")
                 docs = await asyncio.to_thread(
                     self.rag_service.get_relevant_documents, query
                 )
                 docs = docs[:top_k] if docs else []
-            elif self.vector_store:
-                # Direct vector store search
+                if docs:
+                    logger.info(f"[KnowledgeSearch] RAG service returned {len(docs)} results")
+            except Exception as e:
+                logger.warning(f"[KnowledgeSearch] RAG service search failed: {e}, trying vector store")
+                docs = []
+
+        # Fall back to direct vector store search
+        if not docs and self.vector_store:
+            try:
+                logger.debug(f"[KnowledgeSearch] Using vector store for query: {query[:30]}...")
                 docs = await asyncio.to_thread(
                     self.vector_store.similarity_search, query, k=top_k
                 )
-            else:
-                return []
+                if docs:
+                    logger.info(f"[KnowledgeSearch] Vector store returned {len(docs)} results")
+            except Exception as e:
+                logger.warning(f"[KnowledgeSearch] Vector store search failed: {e}")
+                docs = []
 
-            results = []
-            for doc in docs:
+        if not docs:
+            logger.debug("[KnowledgeSearch] No vector search results, will try text search")
+            return []
+
+        results = []
+        for doc in docs:
+            try:
                 if isinstance(doc, dict):
                     results.append({
                         "content": doc.get("content", doc.get("page_content", "")),
@@ -391,12 +410,11 @@ class KnowledgeSearchTool(BaseMCPTool):
                         "score": doc.metadata.get("score", 0) if hasattr(doc, "metadata") else 0,
                         "search_type": "vector"
                     })
+            except Exception as e:
+                logger.debug(f"[KnowledgeSearch] Error parsing document: {e}")
+                continue
 
-            return results
-
-        except Exception as e:
-            logger.error(f"[KnowledgeSearch] Vector search error: {e}")
-            return []
+        return results
 
     async def _text_search(self, query: str, top_k: int) -> List[dict]:
         """Execute text search in knowledge base files as fallback."""

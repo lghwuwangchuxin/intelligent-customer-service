@@ -1,11 +1,22 @@
-import { useState, useCallback } from 'react';
-import { agentApi, chatApi, ChatMessage as ApiChatMessage, AgentStreamEvent, AgentToolCall} from '../services/api';
+import { useState, useCallback, useRef } from 'react';
+import {
+  agentApi,
+  chatApi,
+  langgraphApi,
+  ChatMessage as ApiChatMessage,
+  AgentStreamEvent,
+  AgentToolCall
+} from '../services/api';
 import { Message } from '../components/ChatMessage';
 import { ThinkingStep } from '../components/ThinkingIndicator';
 
 export interface UseAgentChatOptions {
   useRag?: boolean;
   agentMode?: boolean;
+  useLangGraph?: boolean;
+  userId?: string;
+  conversationId?: string;
+  onConversationCreated?: (conversationId: string) => void;
 }
 
 export function useAgentChat(options: UseAgentChatOptions = {}) {
@@ -14,13 +25,23 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const [useRag, setUseRag] = useState(options.useRag ?? true);
   const [agentMode, setAgentMode] = useState(options.agentMode ?? false);
+  const [useLangGraph, setUseLangGraph] = useState(options.useLangGraph ?? true);
+  const [userId, setUserId] = useState(options.userId ?? '');
+  const [conversationId, setConversationId] = useState(options.conversationId ?? '');
 
   // Agent-specific state
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>('');
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Plan state for LangGraph
+  const [currentPlan, setCurrentPlan] = useState<Array<{ id: number; description: string; status: string }>>([]);
+
+  const onConversationCreatedRef = useRef(options.onConversationCreated);
+  onConversationCreatedRef.current = options.onConversationCreated;
+
   const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const generateConversationId = () => `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const sendMessage = useCallback(
     async (content: string, stream: boolean = true) => {
@@ -30,6 +51,15 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
       setThinkingSteps([]);
       setCurrentStatus('');
       setCurrentStep(0);
+      setCurrentPlan([]);
+
+      // Generate conversation ID if not exists
+      let currentConvId = conversationId;
+      if (!currentConvId) {
+        currentConvId = generateConversationId();
+        setConversationId(currentConvId);
+        onConversationCreatedRef.current?.(currentConvId);
+      }
 
       // Add user message
       const userMessage: Message = {
@@ -67,11 +97,17 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             },
           ]);
 
-          for await (const event of agentApi.streamMessage({
+          // Choose API based on useLangGraph setting
+          const streamApi = useLangGraph ? langgraphApi : agentApi;
+          const request = {
             message: content,
+            conversation_id: currentConvId,
+            user_id: userId || undefined,
             history,
             stream: true,
-          })) {
+          };
+
+          for await (const event of streamApi.streamMessage(request)) {
             handleAgentEvent(event, assistantId, fullContent, toolCalls, iterations, (newContent) => {
               fullContent = newContent;
             }, (newIterations) => {
@@ -107,6 +143,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
           for await (const chunk of chatApi.streamMessage({
             message: content,
+            conversation_id: currentConvId,
             history,
             use_rag: useRag,
             stream: true,
@@ -122,6 +159,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           // Non-streaming response
           const response = await chatApi.sendMessage({
             message: content,
+            conversation_id: currentConvId,
             history,
             use_rag: useRag,
             stream: false,
@@ -148,18 +186,18 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         setCurrentStatus('');
       }
     },
-    [messages, isLoading, useRag, agentMode]
+    [messages, isLoading, useRag, agentMode, useLangGraph, userId, conversationId]
   );
 
   const handleAgentEvent = (
     event: AgentStreamEvent,
     assistantId: string,
     currentContent: string,
-    toolCalls: AgentToolCall[],
-    iterations: number,
+    _toolCalls: AgentToolCall[],
+    _iterations: number,
     setContent: (content: string) => void,
     setIterations: (iterations: number) => void,
-    addToolCalls: (calls: AgentToolCall[]) => void
+    _addToolCalls: (calls: AgentToolCall[]) => void
   ) => {
     switch (event.type) {
       case 'status':
@@ -227,6 +265,24 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     setThinkingSteps([]);
     setCurrentStatus('');
     setCurrentStep(0);
+    setCurrentPlan([]);
+  }, []);
+
+  const startNewConversation = useCallback(() => {
+    clearMessages();
+    const newConvId = generateConversationId();
+    setConversationId(newConvId);
+    onConversationCreatedRef.current?.(newConvId);
+    return newConvId;
+  }, [clearMessages]);
+
+  const loadConversation = useCallback((convId: string, loadedMessages: Message[]) => {
+    setConversationId(convId);
+    setMessages(loadedMessages);
+    setThinkingSteps([]);
+    setCurrentStatus('');
+    setCurrentStep(0);
+    setCurrentPlan([]);
   }, []);
 
   return {
@@ -237,12 +293,21 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     setUseRag,
     agentMode,
     setAgentMode,
+    useLangGraph,
+    setUseLangGraph,
+    userId,
+    setUserId,
+    conversationId,
+    setConversationId,
     sendMessage,
     clearMessages,
+    startNewConversation,
+    loadConversation,
     // Agent-specific
     thinkingSteps,
     currentStatus,
     currentStep,
+    currentPlan,
   };
 }
 

@@ -62,8 +62,98 @@ export interface SystemInfo {
 export interface AgentChatRequest {
   message: string;
   conversation_id?: string;
+  user_id?: string;  // For personalized long-term memory
   history?: ChatMessage[];
   stream?: boolean;
+}
+
+// LangGraph Agent types
+export interface LangGraphChatRequest {
+  message: string;
+  conversation_id?: string;
+  user_id?: string;  // For personalized long-term memory
+  history?: ChatMessage[];
+  stream?: boolean;
+  enable_planning?: boolean;
+}
+
+export interface LangGraphChatResponse {
+  response: string;
+  conversation_id?: string;
+  plan?: Array<{ id: number; description: string; status: string }>;
+  thoughts?: AgentThought[];
+  tool_calls?: AgentToolCall[];
+  iterations: number;
+  parallel_executions?: number;
+  error_recoveries?: number;
+  error?: string;
+}
+
+// Conversation History types
+export interface ConversationSummary {
+  conversation_id: string;
+  title?: string;
+  message_count: number;
+  interaction_count: number;
+  has_summary: boolean;
+  created_at: string;
+  updated_at: string;
+  last_message?: { role: string; content: string };
+}
+
+export interface ConversationDetail {
+  conversation_id: string;
+  title?: string;
+  messages: Array<{ role: string; content: string; timestamp?: string }>;
+  interactions: Array<{
+    interaction_id: string;
+    timestamp: string;
+    question: string;
+    response: string;
+    thoughts: AgentThought[];
+    tool_calls: AgentToolCall[];
+    iterations: number;
+    duration_ms: number;
+    error?: string;
+  }>;
+  summary?: string;
+  message_count: number;
+  interaction_count: number;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+// Long-term Memory types
+export interface UserPreference {
+  key: string;
+  value: unknown;
+  category?: string;
+  updated_at?: string;
+}
+
+export interface MemoryEntity {
+  entity_id: string;
+  entity_type: string;
+  name: string;
+  attributes: Record<string, unknown>;
+  relationships?: Array<{ type: string; target: string }>;
+}
+
+export interface MemoryKnowledge {
+  key?: string;
+  topic: string;
+  content: string;
+  source?: string;
+  tags?: string[];
+  relevance_score?: number;
+}
+
+export interface MemoryStats {
+  store_type: string;
+  namespace_count: number;
+  total_items: number;
+  namespaces: string[];
 }
 
 export interface AgentThought {
@@ -451,6 +541,225 @@ export const configApi = {
   },
 };
 
+// LangGraph Agent API
+export const langgraphApi = {
+  /**
+   * Send a LangGraph agent chat message
+   */
+  sendMessage: async (request: LangGraphChatRequest): Promise<LangGraphChatResponse> => {
+    const response = await apiClient.post<LangGraphChatResponse>('/agent/langgraph/chat', request);
+    return response.data;
+  },
+
+  /**
+   * Stream a LangGraph agent chat with intermediate steps
+   */
+  streamMessage: async function* (request: LangGraphChatRequest): AsyncGenerator<AgentStreamEvent> {
+    const response = await fetch(`${API_BASE_URL}/agent/langgraph/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...request, stream: true }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('Response body is null');
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') {
+            return;
+          }
+          try {
+            const event = JSON.parse(data) as AgentStreamEvent;
+            yield event;
+          } catch {
+            // Not JSON, skip
+          }
+        }
+      }
+    }
+  },
+
+  /**
+   * Get agent capabilities
+   */
+  getCapabilities: async () => {
+    const response = await apiClient.get('/agent/capabilities');
+    return response.data;
+  },
+};
+
+// Conversation History API
+export const conversationApi = {
+  /**
+   * List all conversations
+   */
+  list: async (params?: { limit?: number; offset?: number; sort_by?: string; descending?: boolean }): Promise<{
+    conversations: ConversationSummary[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> => {
+    const response = await apiClient.get('/agent/conversations', { params });
+    return response.data;
+  },
+
+  /**
+   * Get conversation detail
+   */
+  getDetail: async (conversationId: string): Promise<ConversationDetail> => {
+    const response = await apiClient.get(`/agent/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  /**
+   * Update conversation (e.g., title)
+   */
+  update: async (conversationId: string, data: { title?: string }): Promise<{ success: boolean }> => {
+    const response = await apiClient.patch(`/agent/conversations/${conversationId}`, data);
+    return response.data;
+  },
+
+  /**
+   * Delete conversation
+   */
+  delete: async (conversationId: string): Promise<{ success: boolean }> => {
+    const response = await apiClient.delete(`/agent/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  /**
+   * Export conversation
+   */
+  export: async (conversationId: string): Promise<{ conversation_id: string; data: unknown; exported_at: string }> => {
+    const response = await apiClient.post(`/agent/conversations/${conversationId}/export`);
+    return response.data;
+  },
+
+  /**
+   * Import conversation
+   */
+  import: async (data: unknown): Promise<{ success: boolean; conversation_id: string }> => {
+    const response = await apiClient.post('/agent/conversations/import', data);
+    return response.data;
+  },
+};
+
+// Long-term Memory Store API
+export const memoryStoreApi = {
+  /**
+   * Get memory store statistics
+   */
+  getStats: async (): Promise<MemoryStats> => {
+    const response = await apiClient.get<MemoryStats>('/agent/store/stats');
+    return response.data;
+  },
+
+  // User Preferences
+  /**
+   * Set user preference
+   */
+  setUserPreference: async (userId: string, preference: { key: string; value: unknown; category?: string }): Promise<UserPreference> => {
+    const response = await apiClient.post(`/agent/store/users/${userId}/preferences`, preference);
+    return response.data;
+  },
+
+  /**
+   * Get all user preferences
+   */
+  getUserPreferences: async (userId: string, category?: string): Promise<{ user_id: string; preferences: UserPreference[]; category?: string }> => {
+    const response = await apiClient.get(`/agent/store/users/${userId}/preferences`, { params: { category } });
+    return response.data;
+  },
+
+  /**
+   * Get specific user preference
+   */
+  getUserPreference: async (userId: string, key: string): Promise<{ user_id: string; key: string; value: unknown }> => {
+    const response = await apiClient.get(`/agent/store/users/${userId}/preferences/${key}`);
+    return response.data;
+  },
+
+  // Entities
+  /**
+   * Store entity
+   */
+  storeEntity: async (entity: { entity_id: string; entity_type: string; name: string; attributes?: Record<string, unknown>; relationships?: Array<{ type: string; target: string }> }): Promise<MemoryEntity> => {
+    const response = await apiClient.post('/agent/store/entities', entity);
+    return response.data;
+  },
+
+  /**
+   * Get entity
+   */
+  getEntity: async (entityType: string, entityId: string): Promise<MemoryEntity> => {
+    const response = await apiClient.get(`/agent/store/entities/${entityType}/${entityId}`);
+    return response.data;
+  },
+
+  /**
+   * Search entities
+   */
+  searchEntities: async (query: string, entityType?: string, limit?: number): Promise<{ query: string; results: MemoryEntity[]; count: number }> => {
+    const response = await apiClient.get('/agent/store/entities/search', {
+      params: { query, entity_type: entityType, limit },
+    });
+    return response.data;
+  },
+
+  // Knowledge
+  /**
+   * Store knowledge
+   */
+  storeKnowledge: async (knowledge: { topic: string; content: string; source?: string; tags?: string[] }): Promise<MemoryKnowledge> => {
+    const response = await apiClient.post('/agent/store/knowledge', knowledge);
+    return response.data;
+  },
+
+  /**
+   * Search knowledge
+   */
+  searchKnowledge: async (query: string, limit?: number): Promise<{ results: MemoryKnowledge[]; total: number; query: string }> => {
+    const response = await apiClient.post('/agent/store/knowledge/search', { query, limit });
+    return response.data;
+  },
+
+  // User Context
+  /**
+   * Get user context (preferences + entities)
+   */
+  getUserContext: async (userId: string, options?: { include_preferences?: boolean; include_entities?: boolean }): Promise<Record<string, unknown>> => {
+    const response = await apiClient.get(`/agent/store/users/${userId}/context`, { params: options });
+    return response.data;
+  },
+
+  /**
+   * Clear user memory
+   */
+  clearUserMemory: async (userId: string): Promise<{ success: boolean; user_id: string; deleted_items: number }> => {
+    const response = await apiClient.delete(`/agent/store/users/${userId}`);
+    return response.data;
+  },
+};
+
 export default {
   chat: chatApi,
   knowledge: knowledgeApi,
@@ -458,4 +767,7 @@ export default {
   agent: agentApi,
   mcp: mcpApi,
   config: configApi,
+  langgraph: langgraphApi,
+  conversation: conversationApi,
+  memoryStore: memoryStoreApi,
 };

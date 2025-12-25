@@ -144,6 +144,10 @@ class ServiceRegistry:
                 llm_manager=self._services["llm"],
             )
 
+        if "store_manager" not in self._services:
+            self._services["store_manager"] = ServiceFactory.create_store_manager()
+            logger.info("[ServiceRegistry] Store manager created for long-term memory")
+
         if "agent" not in self._services:
             self._services["agent"] = ServiceFactory.create_react_agent(
                 llm_manager=self._services["llm"],
@@ -156,6 +160,7 @@ class ServiceRegistry:
                 llm_manager=self._services["llm"],
                 tool_registry=self._services["tool_registry"],
                 memory_manager=self._services["memory_manager"],
+                store_manager=self._services.get("store_manager"),
             )
 
     def _ensure_upload_services(self) -> None:
@@ -244,7 +249,7 @@ class ServiceRegistry:
                 self._ensure_es_services()
             elif name in ("rag", "chat"):
                 self._ensure_rag_services()
-            elif name in ("tool_registry", "memory_manager", "agent", "langgraph_agent"):
+            elif name in ("tool_registry", "memory_manager", "store_manager", "agent", "langgraph_agent"):
                 self._ensure_agent_services()
             elif name == "upload_service":
                 self._ensure_upload_services()

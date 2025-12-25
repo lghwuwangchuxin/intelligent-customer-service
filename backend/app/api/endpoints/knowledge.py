@@ -775,3 +775,384 @@ async def delete_document(doc_id: str):
     except Exception as e:
         logger.error(f"Delete document error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== RAG Quality Evaluation (LlamaIndex + RAGAS) ==============
+
+class RAGEvaluationRequest(BaseModel):
+    """RAG 质量评估请求"""
+    question: str = Field(..., description="用户问题")
+    reference: Optional[str] = Field(None, description="参考答案（可选，用于正确性评估）")
+    top_k: int = Field(default=5, ge=1, le=20, description="检索结果数量")
+    evaluate_retrieval: bool = Field(default=True, description="是否评估检索质量")
+    evaluate_generation: bool = Field(default=True, description="是否评估生成质量")
+
+
+class RAGEvaluationResponse(BaseModel):
+    """RAG 评估结果"""
+    query: str
+    response: str
+
+    # 检索质量指标 (RAGAS)
+    context_precision: float = Field(default=0.0, description="上下文精确度 (0-1, RAGAS)")
+    context_recall: float = Field(default=0.0, description="上下文召回率 (0-1, RAGAS)")
+
+    # 生成质量指标 (LlamaIndex)
+    faithfulness: float = Field(default=0.0, description="答案忠实度 (0-1, LlamaIndex)")
+    relevancy: float = Field(default=0.0, description="答案相关性 (0-1, LlamaIndex)")
+    correctness: float = Field(default=0.0, description="答案正确性 (0-1, LlamaIndex)")
+
+    # 综合评分
+    overall_score: float = Field(..., description="综合评分 (0-1)")
+
+    # 元数据
+    evaluator_type: str = Field(..., description="评估器类型 (llamaindex/ragas/hybrid)")
+    evaluation_time_ms: int = Field(..., description="评估耗时(ms)")
+    suggestions: List[str] = Field(default_factory=list, description="改进建议")
+
+
+@router.post("/rag/ragas-evaluate", response_model=RAGEvaluationResponse)
+async def evaluate_rag_quality(request: RAGEvaluationRequest):
+    """
+    使用 LlamaIndex Evaluation + RAGAS 框架进行 RAG 质量评估。
+
+    **LlamaIndex Evaluators**:
+    - FaithfulnessEvaluator: 评估答案是否忠实于上下文
+    - RelevancyEvaluator: 评估答案与问题的相关性
+    - CorrectnessEvaluator: 评估答案的正确性（需要 reference）
+
+    **RAGAS Metrics** (如果已安装):
+    - context_precision: 上下文精确度
+    - context_recall: 上下文召回率
+    - faithfulness: 忠实度
+    - answer_relevancy: 答案相关性
+
+    注意: 此评估会调用 LLM 进行评判，可能需要几秒钟完成。
+    """
+    from app.rag.ragas_evaluator import get_rag_evaluator
+    from app.rag.query_engine import get_query_engine
+
+    try:
+        # 获取 RAG 查询引擎和评估器
+        query_engine = get_query_engine()
+        evaluator = get_rag_evaluator()
+
+        # 执行 RAG 查询
+        rag_response = await query_engine.aquery(request.question)
+
+        # 提取上下文和答案
+        contexts = [s.get("content", "") for s in rag_response.sources]
+        answer = rag_response.answer
+
+        # 执行评估
+        result = await evaluator.evaluate(
+            query=request.question,
+            response=answer,
+            contexts=contexts,
+            reference=request.reference,
+            evaluate_retrieval=request.evaluate_retrieval,
+            evaluate_generation=request.evaluate_generation,
+        )
+
+        return RAGEvaluationResponse(
+            query=result.query,
+            response=answer[:500] + "..." if len(answer) > 500 else answer,
+            context_precision=result.retrieval.context_precision,
+            context_recall=result.retrieval.context_recall,
+            faithfulness=result.generation.faithfulness,
+            relevancy=max(result.generation.relevancy, result.generation.answer_relevancy),
+            correctness=result.generation.correctness,
+            overall_score=result.overall_score,
+            evaluator_type=result.evaluator_type,
+            evaluation_time_ms=result.evaluation_time_ms,
+            suggestions=result.suggestions,
+        )
+
+    except Exception as e:
+        logger.error(f"RAG evaluation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RAGBatchEvaluationRequest(BaseModel):
+    """RAG 批量评估请求"""
+    test_cases: List[Dict[str, Any]] = Field(
+        ...,
+        description="测试用例列表，每个包含 question, reference(可选)",
+        examples=[[
+            {"question": "支付方式有哪些？", "reference": "支持微信、支付宝、银行卡"},
+            {"question": "如何退款？"},
+        ]]
+    )
+    max_concurrent: int = Field(default=3, ge=1, le=10, description="最大并发数")
+
+
+@router.post("/rag/ragas-batch-evaluate")
+async def batch_evaluate_rag(request: RAGBatchEvaluationRequest):
+    """
+    批量执行 RAG 质量评估。
+
+    使用 LlamaIndex Evaluation + RAGAS 评估多个测试用例。
+
+    适用于：
+    - RAG 系统的回归测试
+    - 不同配置的对比评估
+    - 知识库质量检测
+
+    注意: 批量评估可能需要较长时间，建议控制测试用例数量。
+    """
+    from app.rag.ragas_evaluator import get_rag_evaluator
+    from app.rag.query_engine import get_query_engine
+
+    try:
+        query_engine = get_query_engine()
+        evaluator = get_rag_evaluator()
+
+        results = []
+        for case in request.test_cases:
+            try:
+                question = case.get("question", "")
+
+                # 执行 RAG 查询
+                rag_response = await query_engine.aquery(question)
+
+                # 提取上下文和答案
+                contexts = [s.get("content", "") for s in rag_response.sources]
+                answer = rag_response.answer
+
+                # 执行评估
+                result = await evaluator.evaluate(
+                    query=question,
+                    response=answer,
+                    contexts=contexts,
+                    reference=case.get("reference"),
+                )
+
+                results.append({
+                    "question": question,
+                    "status": "success",
+                    "evaluator_type": result.evaluator_type,
+                    "overall_score": result.overall_score,
+                    "retrieval": {
+                        "context_precision": result.retrieval.context_precision,
+                        "context_recall": result.retrieval.context_recall,
+                    },
+                    "generation": {
+                        "faithfulness": result.generation.faithfulness,
+                        "relevancy": max(result.generation.relevancy, result.generation.answer_relevancy),
+                        "correctness": result.generation.correctness,
+                    },
+                    "suggestions": result.suggestions,
+                })
+
+            except Exception as e:
+                results.append({
+                    "question": case.get("question", ""),
+                    "status": "error",
+                    "error": str(e),
+                })
+
+        # 计算聚合指标
+        successful_results = [r for r in results if r.get("status") == "success"]
+
+        if successful_results:
+            def avg(key_path: str) -> float:
+                values = []
+                for r in successful_results:
+                    value = r
+                    for key in key_path.split("."):
+                        value = value.get(key, 0) if isinstance(value, dict) else 0
+                    if value:
+                        values.append(value)
+                return round(sum(values) / len(values), 4) if values else 0.0
+
+            aggregated = {
+                "total_cases": len(request.test_cases),
+                "successful_cases": len(successful_results),
+                "failed_cases": len(results) - len(successful_results),
+                "avg_overall_score": avg("overall_score"),
+                "retrieval": {
+                    "avg_context_precision": avg("retrieval.context_precision"),
+                    "avg_context_recall": avg("retrieval.context_recall"),
+                },
+                "generation": {
+                    "avg_faithfulness": avg("generation.faithfulness"),
+                    "avg_relevancy": avg("generation.relevancy"),
+                    "avg_correctness": avg("generation.correctness"),
+                },
+            }
+        else:
+            aggregated = {
+                "total_cases": len(request.test_cases),
+                "successful_cases": 0,
+                "failed_cases": len(results),
+            }
+
+        return {
+            "success": True,
+            "aggregated_metrics": aggregated,
+            "detailed_results": results,
+        }
+
+    except Exception as e:
+        logger.error(f"Batch RAG evaluation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rag/ragas-stats")
+async def get_ragas_stats():
+    """
+    获取 RAGAS 评估的聚合统计信息。
+
+    返回自上次重置以来所有评估的汇总指标，包括:
+    - 平均检索质量指标
+    - 平均生成质量指标
+    - 幻觉检测率
+    """
+    from app.rag.ragas_evaluator import get_ragas_evaluator
+
+    try:
+        evaluator = get_ragas_evaluator()
+        metrics = evaluator.get_aggregated_metrics()
+
+        if not metrics:
+            return {
+                "success": True,
+                "message": "暂无 RAGAS 评估记录",
+                "metrics": {},
+            }
+
+        return {
+            "success": True,
+            "metrics": metrics,
+        }
+
+    except Exception as e:
+        logger.error(f"Get RAGAS stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rag/ragas-history")
+async def get_ragas_history(limit: int = Query(default=20, ge=1, le=100)):
+    """
+    获取 RAGAS 评估历史记录。
+
+    返回最近的评估详细结果。
+    """
+    from app.rag.ragas_evaluator import get_ragas_evaluator
+
+    try:
+        evaluator = get_ragas_evaluator()
+        history = evaluator.get_evaluation_history(limit=limit)
+
+        return {
+            "success": True,
+            "count": len(history),
+            "history": history,
+        }
+
+    except Exception as e:
+        logger.error(f"Get RAGAS history error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/rag/ragas-reset")
+async def reset_ragas_evaluator():
+    """
+    重置 RAGAS 评估器，清除所有历史记录和统计。
+    """
+    from app.rag.ragas_evaluator import get_ragas_evaluator
+
+    try:
+        evaluator = get_ragas_evaluator()
+        evaluator.reset()
+
+        return {
+            "success": True,
+            "message": "RAGAS 评估器已重置",
+        }
+
+    except Exception as e:
+        logger.error(f"Reset RAGAS evaluator error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Pipeline Stage Quality Monitoring ==============
+
+@router.get("/rag/pipeline-stats")
+async def get_pipeline_stage_stats():
+    """
+    获取 RAG 流水线各阶段的质量统计。
+
+    返回各阶段的平均指标:
+    - 查询转换: 扩展查询数量
+    - 检索: 平均检索数量和分数
+    - 重排序: 平均重排序数量和分数
+    - 后处理: 平均最终文档数量
+    - 质量分布: excellent/good/fair/poor 的分布
+    """
+    from app.rag.ragas_evaluator import get_pipeline_monitor
+
+    try:
+        monitor = get_pipeline_monitor()
+        stats = monitor.get_stage_stats()
+
+        if not stats:
+            return {
+                "success": True,
+                "message": "暂无流水线监控记录",
+                "stats": {},
+            }
+
+        return {
+            "success": True,
+            "stats": stats,
+        }
+
+    except Exception as e:
+        logger.error(f"Get pipeline stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rag/pipeline-history")
+async def get_pipeline_stage_history(limit: int = Query(default=20, ge=1, le=100)):
+    """
+    获取 RAG 流水线各阶段的质量历史记录。
+
+    返回最近查询的各阶段详细指标。
+    """
+    from app.rag.ragas_evaluator import get_pipeline_monitor
+
+    try:
+        monitor = get_pipeline_monitor()
+        history = monitor.get_stage_history(limit=limit)
+
+        return {
+            "success": True,
+            "count": len(history),
+            "history": history,
+        }
+
+    except Exception as e:
+        logger.error(f"Get pipeline history error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/rag/pipeline-reset")
+async def reset_pipeline_monitor():
+    """
+    重置流水线质量监控器。
+    """
+    from app.rag.ragas_evaluator import get_pipeline_monitor
+
+    try:
+        monitor = get_pipeline_monitor()
+        monitor.reset()
+
+        return {
+            "success": True,
+            "message": "流水线质量监控器已重置",
+        }
+
+    except Exception as e:
+        logger.error(f"Reset pipeline monitor error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

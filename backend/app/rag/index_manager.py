@@ -146,7 +146,7 @@ class IndexManager:
             model=self.llm_model,
             base_url=settings.LLM_BASE_URL,
             temperature=settings.LLM_TEMPERATURE,
-            request_timeout=120.0,
+            request_timeout=300.0,  # 本地 LLM 可能较慢，增加超时时间
         )
 
         # Set chunk sizes

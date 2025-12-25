@@ -1,26 +1,168 @@
 """
 Web Search Tool - MCP tool for searching the web.
-Uses DuckDuckGo for privacy-friendly web searches.
+Uses Baidu search for Chinese web searches.
 """
 import logging
-from typing import List
+import re
+import urllib.parse
+from typing import List, Optional
+
+import httpx
+from bs4 import BeautifulSoup
 
 from app.mcp.tools.base import BaseMCPTool, ToolParameter
 
 logger = logging.getLogger(__name__)
 
 
+class BaiduSearchClient:
+    """
+    百度搜索客户端。
+
+    通过解析百度搜索结果页面获取搜索结果。
+    """
+
+    BASE_URL = "https://www.baidu.com/s"
+
+    # 模拟浏览器请求头
+    HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
+    def __init__(self, timeout: float = 10.0):
+        self.timeout = timeout
+
+    async def search(self, query: str, max_results: int = 5) -> List[dict]:
+        """
+        执行百度搜索。
+
+        Args:
+            query: 搜索查询。
+            max_results: 最大结果数。
+
+        Returns:
+            搜索结果列表，每个结果包含 title, link, snippet。
+        """
+        params = {
+            "wd": query,
+            "rn": min(max_results * 2, 20),  # 请求更多结果以防过滤
+            "ie": "utf-8",
+        }
+
+        url = f"{self.BASE_URL}?{urllib.parse.urlencode(params)}"
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+                response = await client.get(url, headers=self.HEADERS)
+                response.raise_for_status()
+
+            return self._parse_results(response.text, max_results)
+
+        except httpx.TimeoutException:
+            logger.error(f"Baidu search timeout for query: {query}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"Baidu search HTTP error: {e}")
+            raise
+
+    def _parse_results(self, html: str, max_results: int) -> List[dict]:
+        """解析百度搜索结果页面。"""
+        soup = BeautifulSoup(html, "html.parser")
+        results = []
+
+        # 百度搜索结果的容器
+        content_left = soup.find("div", {"id": "content_left"})
+        if not content_left:
+            logger.warning("Could not find content_left in Baidu response")
+            return results
+
+        # 查找所有搜索结果项
+        result_items = content_left.find_all("div", class_=re.compile(r"result|c-container"))
+
+        for item in result_items:
+            if len(results) >= max_results:
+                break
+
+            result = self._parse_result_item(item)
+            if result:
+                results.append(result)
+
+        return results
+
+    def _parse_result_item(self, item) -> Optional[dict]:
+        """解析单个搜索结果项。"""
+        try:
+            # 获取标题和链接
+            title_tag = item.find("h3")
+            if not title_tag:
+                return None
+
+            link_tag = title_tag.find("a")
+            if not link_tag:
+                return None
+
+            title = link_tag.get_text(strip=True)
+            link = link_tag.get("href", "")
+
+            # 过滤无效结果
+            if not title or not link:
+                return None
+
+            # 获取摘要
+            snippet = ""
+            # 尝试多种摘要选择器
+            snippet_selectors = [
+                "span.content-right_8Zs40",
+                "div.c-abstract",
+                "div.c-span-last",
+                "span[class*='content']",
+            ]
+
+            for selector in snippet_selectors:
+                snippet_tag = item.select_one(selector)
+                if snippet_tag:
+                    snippet = snippet_tag.get_text(strip=True)
+                    break
+
+            # 如果还没找到摘要，尝试获取所有文本
+            if not snippet:
+                # 获取除标题外的文本
+                for tag in item.find_all("h3"):
+                    tag.decompose()
+                snippet = item.get_text(separator=" ", strip=True)[:300]
+
+            # 清理摘要
+            snippet = re.sub(r'\s+', ' ', snippet).strip()
+
+            return {
+                "title": title,
+                "link": link,
+                "snippet": snippet[:500] if snippet else "",
+            }
+
+        except Exception as e:
+            logger.debug(f"Error parsing result item: {e}")
+            return None
+
+
 class WebSearchTool(BaseMCPTool):
     """
     Search the web for current information.
-    Uses DuckDuckGo search API.
+    Uses Baidu search for Chinese web searches.
     """
 
     name = "web_search"
     description = (
         "Search the web for current information, news, or topics not in the knowledge base. "
         "Use this when you need up-to-date information or when the knowledge base "
-        "doesn't have the answer."
+        "doesn't have the answer. Uses Baidu search engine."
     )
     parameters = [
         ToolParameter(
@@ -36,45 +178,23 @@ class WebSearchTool(BaseMCPTool):
             required=False,
             default=5,
         ),
-        ToolParameter(
-            name="region",
-            type="string",
-            description="Region for search results (e.g., 'cn-zh' for China, 'us-en' for US)",
-            required=False,
-            default="cn-zh",
-        ),
     ]
 
-    def __init__(self):
+    def __init__(self, timeout: float = 10.0):
         super().__init__()
-        self._ddgs = None
-
-    def _get_ddgs(self):
-        """Lazy load DuckDuckGo search client."""
-        if self._ddgs is None:
-            try:
-                from duckduckgo_search import DDGS
-                self._ddgs = DDGS()
-            except ImportError:
-                raise ImportError(
-                    "duckduckgo-search is required. "
-                    "Install with: pip install duckduckgo-search"
-                )
-        return self._ddgs
+        self._client = BaiduSearchClient(timeout=timeout)
 
     async def execute(
         self,
         query: str,
         max_results: int = 5,
-        region: str = "cn-zh",
     ) -> List[dict]:
         """
-        Search the web using DuckDuckGo.
+        Search the web using Baidu.
 
         Args:
             query: Search query.
             max_results: Maximum number of results.
-            region: Search region.
 
         Returns:
             List of search results with title, link, and snippet.
@@ -82,33 +202,14 @@ class WebSearchTool(BaseMCPTool):
         max_results = min(max(1, max_results), 10)
 
         try:
-            ddgs = self._get_ddgs()
+            results = await self._client.search(query, max_results)
 
-            # Run search in thread pool since it's synchronous
-            import asyncio
-            results = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: list(ddgs.text(
-                    query,
-                    region=region,
-                    max_results=max_results,
-                ))
-            )
-
-            formatted_results = []
-            for r in results:
-                formatted_results.append({
-                    "title": r.get("title", ""),
-                    "link": r.get("href", r.get("link", "")),
-                    "snippet": r.get("body", r.get("snippet", "")),
-                })
-
-            logger.info(f"Web search for '{query}' returned {len(formatted_results)} results")
-            return formatted_results
+            logger.info(f"Baidu search for '{query}' returned {len(results)} results")
+            return results
 
         except Exception as e:
-            logger.error(f"Web search failed: {e}")
-            return [{"error": str(e)}]
+            logger.error(f"Baidu search failed: {e}")
+            return [{"error": f"百度搜索失败: {str(e)}"}]
 
 
 class WebFetchTool(BaseMCPTool):

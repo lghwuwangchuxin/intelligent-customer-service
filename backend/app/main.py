@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
+from app.core.logging_config import setup_logging, cleanup_old_logs
 from app.api.routes import (
     chat_router, knowledge_router, system_router, agent_router, mcp_router, config_router,
     async_init_services,
@@ -16,11 +17,13 @@ from app.models.database import DatabaseManager
 from app.services.knowledge_base_service import initialize_knowledge_base, get_knowledge_base_service
 from app.core.embeddings import get_embedding_manager, close_http_client
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+# Configure logging using the new logging configuration module
+# This sets up:
+# - Console logging with colored output
+# - File logging with daily and size-based rotation
+# - Separate error log file
+# - Separate RAG pipeline log file
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Database manager
@@ -82,10 +85,21 @@ async def init_knowledge_base_background():
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
+    logger.info("=" * 60)
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.info("=" * 60)
     logger.info(f"LLM Provider: {settings.LLM_PROVIDER}, Model: {settings.LLM_MODEL}")
     logger.info(f"Milvus: {settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
     logger.info(f"Agent Mode: {'Enabled' if settings.AGENT_ENABLED else 'Disabled'}")
+    logger.info(f"Log Dir: {settings.LOG_DIR}, Level: {settings.LOG_LEVEL}")
+
+    # Cleanup old log files on startup
+    try:
+        deleted = cleanup_old_logs(days_to_keep=settings.LOG_CLEANUP_DAYS)
+        if deleted > 0:
+            logger.info(f"[Startup] Cleaned up {deleted} old log files")
+    except Exception as e:
+        logger.warning(f"[Startup] Log cleanup error: {e}")
     if settings.AGENT_ENABLED:
         logger.info(f"Agent Max Iterations: {settings.AGENT_MAX_ITERATIONS}")
 

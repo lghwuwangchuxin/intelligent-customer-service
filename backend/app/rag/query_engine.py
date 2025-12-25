@@ -48,6 +48,7 @@ from app.rag.hybrid_retriever import HybridRetriever, get_hybrid_retriever
 from app.rag.reranker import JinaReranker, get_reranker
 from app.rag.postprocessor import RAGPostProcessor, get_post_processor
 from app.rag.index_manager import IndexManager, get_index_manager
+from app.rag.ragas_evaluator import get_rag_evaluator, RAGEvaluator
 
 # Langfuse observability
 from app.services.langfuse_service import get_langfuse_service
@@ -133,16 +134,18 @@ class EnhancedRAGQueryEngine:
         hybrid_retriever: Optional[HybridRetriever] = None,
         reranker: Optional[JinaReranker] = None,
         post_processor: Optional[RAGPostProcessor] = None,
+        evaluator: Optional[RAGEvaluator] = None,
     ):
         self.index_manager = index_manager or get_index_manager()
         self.query_transformer = query_transformer or get_query_transformer()
         self.hybrid_retriever = hybrid_retriever or get_hybrid_retriever()
         self.reranker = reranker or get_reranker()
         self.post_processor = post_processor or get_post_processor()
+        self.evaluator = evaluator or get_rag_evaluator()
 
         self._llm = LlamaSettings.llm
 
-        logger.info("[EnhancedRAG] Query engine initialized with all components")
+        logger.info("[EnhancedRAG] Query engine initialized with all components (including evaluator)")
 
     async def aquery(
         self,
@@ -479,6 +482,21 @@ class EnhancedRAGQueryEngine:
                     comment=f"Average retrieval score from {len(context.sources)} sources",
                 )
 
+            # Step 6: RAGAS Quality Evaluation (async, non-blocking)
+            if settings.RAG_ENABLE_EVALUATION:
+                import asyncio
+                try:
+                    # 异步执行 RAGAS 评估（不阻塞响应）
+                    asyncio.create_task(self._async_ragas_evaluate(
+                        question=question,
+                        contexts=[s.get("content", "") for s in context.sources],
+                        answer=answer,
+                        trace=trace,
+                        langfuse=langfuse,
+                    ))
+                except Exception as eval_error:
+                    logger.warning(f"[RAGASEvaluator] 异步评估启动失败: {eval_error}")
+
             return RAGResponse(
                 answer=answer,
                 sources=context.sources,
@@ -701,6 +719,77 @@ class EnhancedRAGQueryEngine:
             f"{system_prompt}\n\n用户问题: {question}"
         )
         return response.text.strip()
+
+    async def _async_ragas_evaluate(
+        self,
+        question: str,
+        contexts: List[str],
+        answer: str,
+        trace=None,
+        langfuse=None,
+    ) -> None:
+        """
+        异步执行 LlamaIndex + RAGAS 质量评估（后台任务）。
+
+        使用 LlamaIndex Evaluation 模块:
+        - FaithfulnessEvaluator: 忠实度评估
+        - RelevancyEvaluator: 相关性评估
+        - CorrectnessEvaluator: 正确性评估
+
+        可选 RAGAS 框架指标:
+        - context_precision, context_recall
+        - faithfulness, answer_relevancy
+        """
+        # 使用 ragas_evaluator 模块的 logger 以便日志正确路由到 ragas-eval-*.log
+        ragas_logger = logging.getLogger('app.rag.ragas_evaluator')
+
+        try:
+            result = await self.evaluator.evaluate(
+                query=question,
+                response=answer,
+                contexts=contexts,
+                evaluate_retrieval=True,
+                evaluate_generation=True,
+            )
+
+            # 记录评估结果（使用 ragas_logger 确保日志输出到正确的文件）
+            relevancy = max(result.generation.relevancy, result.generation.answer_relevancy)
+            ragas_logger.info(
+                f"[RAGEvaluator] 异步评估完成 ({result.evaluator_type}) - "
+                f"问题: {question[:50]}... | "
+                f"综合分: {result.overall_score:.2f}, "
+                f"忠实度: {result.generation.faithfulness:.2f}, "
+                f"相关性: {relevancy:.2f}"
+            )
+
+            # 记录改进建议
+            if result.suggestions:
+                for suggestion in result.suggestions:
+                    ragas_logger.info(f"[RAGEvaluator] 建议: {suggestion}")
+
+            # 将评估分数记录到 Langfuse
+            if trace and langfuse and langfuse.enabled:
+                langfuse.log_score(
+                    trace=trace,
+                    name="rag_overall",
+                    value=result.overall_score,
+                    comment="RAG overall quality score (LlamaIndex + RAGAS)",
+                )
+                langfuse.log_score(
+                    trace=trace,
+                    name="rag_faithfulness",
+                    value=result.generation.faithfulness,
+                    comment="Answer faithfulness to context",
+                )
+                langfuse.log_score(
+                    trace=trace,
+                    name="rag_relevancy",
+                    value=relevancy,
+                    comment="Answer relevance to question",
+                )
+
+        except Exception as e:
+            logger.warning(f"[RAGEvaluator] 后台评估失败: {e}")
 
     def retrieve_only(self, question: str, top_k: int = None) -> List[Dict[str, Any]]:
         """

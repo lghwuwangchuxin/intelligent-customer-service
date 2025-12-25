@@ -47,6 +47,15 @@ class TaskStep(BaseModel):
     result: Optional[str] = None
 
 
+class LongTermMemoryContext(BaseModel):
+    """Context from long-term memory for the current session."""
+    user_id: Optional[str] = None
+    user_preferences: Dict[str, Any] = Field(default_factory=dict)
+    relevant_entities: List[Dict[str, Any]] = Field(default_factory=list)
+    relevant_knowledge: List[Dict[str, Any]] = Field(default_factory=list)
+    session_facts: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentState(TypedDict):
     """
     State for the ReAct agent.
@@ -56,6 +65,7 @@ class AgentState(TypedDict):
     # Conversation context
     messages: Annotated[List[Dict[str, str]], operator.add]
     conversation_id: Optional[str]
+    user_id: Optional[str]  # For user-specific memory
 
     # ReAct reasoning
     thoughts: List[ThoughtStep]
@@ -71,6 +81,10 @@ class AgentState(TypedDict):
     plan: Optional[List[TaskStep]]
     current_task_id: Optional[int]
 
+    # Long-term memory context
+    long_term_memory: Optional[LongTermMemoryContext]
+    memory_updates: List[Dict[str, Any]]  # Pending updates to long-term memory
+
     # Control flow
     phase: str
     should_continue: bool
@@ -84,7 +98,9 @@ class AgentState(TypedDict):
 def create_initial_state(
     messages: List[Dict[str, str]],
     conversation_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     max_iterations: int = 10,
+    long_term_memory: Optional[LongTermMemoryContext] = None,
 ) -> AgentState:
     """
     Create initial agent state.
@@ -92,7 +108,9 @@ def create_initial_state(
     Args:
         messages: Initial conversation messages.
         conversation_id: Optional conversation ID.
+        user_id: Optional user ID for personalized memory.
         max_iterations: Maximum reasoning iterations.
+        long_term_memory: Optional pre-loaded long-term memory context.
 
     Returns:
         Initial AgentState.
@@ -100,6 +118,7 @@ def create_initial_state(
     return AgentState(
         messages=messages,
         conversation_id=conversation_id,
+        user_id=user_id,
         thoughts=[],
         current_thought=None,
         current_step=0,
@@ -108,6 +127,8 @@ def create_initial_state(
         pending_tool_call=None,
         plan=None,
         current_task_id=None,
+        long_term_memory=long_term_memory,
+        memory_updates=[],
         phase=AgentPhase.THINKING.value,
         should_continue=True,
         final_response=None,
@@ -186,3 +207,110 @@ class AgentStateManager:
         if state["phase"] in (AgentPhase.COMPLETED.value, AgentPhase.ERROR.value):
             return False
         return True
+
+    # ============== Long-term Memory Methods ==============
+
+    @staticmethod
+    def set_long_term_memory(
+        state: AgentState,
+        memory_context: LongTermMemoryContext,
+    ) -> AgentState:
+        """Set the long-term memory context."""
+        state["long_term_memory"] = memory_context
+        return state
+
+    @staticmethod
+    def queue_memory_update(
+        state: AgentState,
+        update_type: str,
+        data: Dict[str, Any],
+    ) -> AgentState:
+        """
+        Queue a memory update to be persisted later.
+
+        Args:
+            state: Current agent state.
+            update_type: Type of update (user_preference, entity, knowledge, fact).
+            data: Update data.
+
+        Returns:
+            Updated state.
+        """
+        update = {
+            "type": update_type,
+            "data": data,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        state["memory_updates"].append(update)
+        return state
+
+    @staticmethod
+    def add_learned_preference(
+        state: AgentState,
+        key: str,
+        value: Any,
+        confidence: float = 0.8,
+    ) -> AgentState:
+        """Add a learned user preference to be stored."""
+        if not state.get("user_id"):
+            return state
+
+        return AgentStateManager.queue_memory_update(
+            state,
+            update_type="user_preference",
+            data={
+                "user_id": state["user_id"],
+                "key": key,
+                "value": value,
+                "confidence": confidence,
+            },
+        )
+
+    @staticmethod
+    def add_learned_entity(
+        state: AgentState,
+        entity_type: str,
+        entity_id: str,
+        name: str,
+        attributes: Optional[Dict[str, Any]] = None,
+    ) -> AgentState:
+        """Add a learned entity to be stored."""
+        return AgentStateManager.queue_memory_update(
+            state,
+            update_type="entity",
+            data={
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "name": name,
+                "attributes": attributes or {},
+            },
+        )
+
+    @staticmethod
+    def add_learned_fact(
+        state: AgentState,
+        topic: str,
+        content: str,
+        source: Optional[str] = None,
+    ) -> AgentState:
+        """Add a learned fact/knowledge to be stored."""
+        return AgentStateManager.queue_memory_update(
+            state,
+            update_type="knowledge",
+            data={
+                "topic": topic,
+                "content": content,
+                "source": source,
+            },
+        )
+
+    @staticmethod
+    def get_pending_memory_updates(state: AgentState) -> List[Dict[str, Any]]:
+        """Get all pending memory updates."""
+        return state.get("memory_updates", [])
+
+    @staticmethod
+    def clear_memory_updates(state: AgentState) -> AgentState:
+        """Clear pending memory updates after they've been persisted."""
+        state["memory_updates"] = []
+        return state

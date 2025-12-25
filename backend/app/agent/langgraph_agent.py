@@ -18,8 +18,9 @@ except ImportError:
     StateGraph = None
     END = None
 
-from app.agent.state import AgentPhase, ToolCall, ThoughtStep
+from app.agent.state import AgentPhase, ToolCall, ThoughtStep, LongTermMemoryContext
 from app.agent.memory import MemoryManager
+from app.agent.store import StoreManager
 from app.agent.prompts import (
     AGENT_SYSTEM_PROMPT,
     THOUGHT_PROMPT,
@@ -38,6 +39,20 @@ from app.agent.error_recovery import (
     RecoveryConfig,
 )
 
+# 增强日志工具
+from app.utils.log_utils import (
+    LogContext,
+    AgentLogger,
+    log_phase_start,
+    log_phase_end,
+    log_step,
+    log_substep,
+    log_tool_call,
+    log_timing_summary,
+    SEPARATOR_LIGHT,
+    SEPARATOR_HEAVY,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,6 +63,7 @@ class GraphState(TypedDict):
     # Input
     question: str
     conversation_id: Optional[str]
+    user_id: Optional[str]  # For user-specific long-term memory
 
     # Messages
     messages: Annotated[Sequence[Dict[str, str]], add]
@@ -67,6 +83,10 @@ class GraphState(TypedDict):
     plan: Optional[List[Dict[str, Any]]]
     current_task_index: int
 
+    # Long-term memory
+    long_term_memory: Optional[LongTermMemoryContext]
+    memory_updates: List[Dict[str, Any]]  # Pending updates to long-term memory
+
     # Control
     phase: str
     iteration: int
@@ -82,12 +102,15 @@ def create_graph_state(
     question: str,
     messages: List[Dict[str, str]],
     conversation_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     max_iterations: int = 10,
+    long_term_memory: Optional[LongTermMemoryContext] = None,
 ) -> GraphState:
     """Create initial graph state."""
     return GraphState(
         question=question,
         conversation_id=conversation_id,
+        user_id=user_id,
         messages=messages,
         thoughts=[],
         current_thought=None,
@@ -98,6 +121,8 @@ def create_graph_state(
         last_observation=None,
         plan=None,
         current_task_index=0,
+        long_term_memory=long_term_memory,
+        memory_updates=[],
         phase=AgentPhase.THINKING.value,
         iteration=0,
         max_iterations=max_iterations,
@@ -127,6 +152,7 @@ class LangGraphAgent:
         llm_manager,
         tool_registry: Optional[ToolRegistry] = None,
         memory_manager: Optional[MemoryManager] = None,
+        store_manager: Optional[StoreManager] = None,
         max_iterations: int = 10,
         tracer: Optional[LangfuseTracer] = None,
         enable_planning: bool = True,
@@ -140,7 +166,8 @@ class LangGraphAgent:
         Args:
             llm_manager: LLM manager for reasoning.
             tool_registry: Registry of available tools.
-            memory_manager: Memory manager for conversations.
+            memory_manager: Memory manager for conversations (short-term).
+            store_manager: Store manager for long-term memory (cross-session).
             max_iterations: Maximum reasoning iterations.
             tracer: Optional Langfuse tracer.
             enable_planning: Enable task planning for complex questions.
@@ -156,6 +183,7 @@ class LangGraphAgent:
         self.llm = llm_manager
         self.tools = tool_registry or ToolRegistry()
         self.memory = memory_manager or MemoryManager(llm_manager=llm_manager)
+        self.store = store_manager  # Long-term memory store
         self.max_iterations = max_iterations
         self.tracer = tracer or get_tracer()
         self.enable_planning = enable_planning
@@ -303,6 +331,10 @@ class LangGraphAgent:
         question = state["question"]
         iteration = state["iteration"] + 1
 
+        # 记录思考阶段开始
+        logger.info(f"[Agent] {SEPARATOR_LIGHT}")
+        logger.info(f"[Agent] ▶ 迭代 #{iteration} - 思考阶段 (Think)")
+
         # Build observations summary
         observations = ""
         for thought in state["thoughts"]:
@@ -332,8 +364,18 @@ class LangGraphAgent:
         ]
 
         try:
+            think_start = time.time()
             response = await self.llm.ainvoke(messages)
+            think_elapsed = int((time.time() - think_start) * 1000)
+
             thought, action, action_input = self._parse_thought_response(response)
+
+            # 记录思考结果
+            logger.info(f"[Agent]   思考: {thought[:100] if thought else 'None'}...")
+            if action and action not in ("回答", "answer"):
+                logger.info(f"[Agent]   决策: 执行工具 [{action}] (耗时: {think_elapsed}ms)")
+            else:
+                logger.info(f"[Agent]   决策: 生成最终回答 (耗时: {think_elapsed}ms)")
 
             # Create thought step
             thought_step = ThoughtStep(
@@ -353,7 +395,7 @@ class LangGraphAgent:
                 "phase": AgentPhase.ACTING.value if action and action not in ("回答", "answer") else AgentPhase.RESPONDING.value,
             }
         except Exception as e:
-            logger.error(f"Think error: {e}")
+            logger.error(f"[Agent] Think error: {e}")
             return {
                 **state,
                 "error": str(e),
@@ -372,10 +414,23 @@ class LangGraphAgent:
                 "last_observation": "无操作执行",
             }
 
+        # 记录工具调用开始
+        logger.info(f"[Agent] ▶ 执行阶段 (Act) - 工具: [{action}]")
+        logger.info(f"[Agent]   参数: {json.dumps(action_input, ensure_ascii=False)[:100]}")
+
         try:
             start_time = time.time()
             result = await self.tools.execute(action, **action_input)
             duration_ms = int((time.time() - start_time) * 1000)
+
+            # 记录工具调用结果
+            if result.get("success"):
+                result_summary = str(result.get("result", ""))[:100]
+                logger.info(f"[Agent] ✓ 工具 [{action}] 执行成功 ({duration_ms}ms)")
+                logger.info(f"[Agent]   结果: {result_summary}...")
+            else:
+                error_msg = result.get("error", "Unknown error")
+                logger.warning(f"[Agent] ✗ 工具 [{action}] 执行失败 ({duration_ms}ms): {error_msg}")
 
             # Record tool call
             tool_call = ToolCall(
@@ -394,7 +449,7 @@ class LangGraphAgent:
                 "phase": AgentPhase.OBSERVING.value,
             }
         except Exception as e:
-            logger.error(f"Act error: {e}")
+            logger.error(f"[Agent] ✗ 工具 [{action}] 执行异常: {e}")
             return {
                 **state,
                 "last_observation": f"工具执行错误: {str(e)}",
@@ -657,12 +712,124 @@ class LangGraphAgent:
         else:
             return f"工具执行失败: {result.get('error', 'Unknown error')}"
 
+    # ============== Long-term Memory Methods ==============
+
+    async def _load_long_term_memory(
+        self,
+        user_id: str,
+        question: str,
+    ) -> Optional[LongTermMemoryContext]:
+        """
+        Load long-term memory context for the current session.
+
+        Args:
+            user_id: User ID for personalized memory.
+            question: Current question for relevance search.
+
+        Returns:
+            LongTermMemoryContext with user preferences, entities, and knowledge.
+        """
+        if not self.store:
+            return None
+
+        try:
+            # Load user preferences
+            user_preferences = {}
+            prefs = self.store.get_user_preferences(user_id)
+            for pref in prefs:
+                if hasattr(pref, 'key') and hasattr(pref, 'value'):
+                    user_preferences[pref.key] = pref.value
+                elif isinstance(pref, dict):
+                    user_preferences[pref.get('key', '')] = pref.get('value')
+
+            # Search for relevant entities (limit to 5)
+            relevant_entities = []
+            try:
+                entities = self.store.search_entities(query=question, limit=5)
+                for entity in entities:
+                    if hasattr(entity, 'model_dump'):
+                        relevant_entities.append(entity.model_dump())
+                    elif isinstance(entity, dict):
+                        relevant_entities.append(entity)
+            except Exception as e:
+                logger.debug(f"Entity search failed: {e}")
+
+            # Search for relevant knowledge (limit to 5)
+            relevant_knowledge = []
+            try:
+                knowledge_items = self.store.search_knowledge(query=question, limit=5)
+                for item in knowledge_items:
+                    if hasattr(item, 'model_dump'):
+                        relevant_knowledge.append(item.model_dump())
+                    elif isinstance(item, dict):
+                        relevant_knowledge.append(item)
+            except Exception as e:
+                logger.debug(f"Knowledge search failed: {e}")
+
+            return LongTermMemoryContext(
+                user_id=user_id,
+                user_preferences=user_preferences,
+                relevant_entities=relevant_entities,
+                relevant_knowledge=relevant_knowledge,
+                session_facts={},
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to load long-term memory: {e}")
+            return None
+
+    async def _persist_memory_updates(
+        self,
+        user_id: str,
+        updates: List[Dict[str, Any]],
+    ) -> None:
+        """
+        Persist queued memory updates to long-term store.
+
+        Args:
+            user_id: User ID for user-specific updates.
+            updates: List of memory updates to persist.
+        """
+        if not self.store:
+            return
+
+        for update in updates:
+            update_type = update.get("type")
+            data = update.get("data", {})
+
+            try:
+                if update_type == "user_preference":
+                    self.store.set_user_preference(
+                        user_id=data.get("user_id", user_id),
+                        key=data.get("key"),
+                        value=data.get("value"),
+                        confidence=data.get("confidence", 0.8),
+                    )
+                elif update_type == "entity":
+                    self.store.store_entity(
+                        entity_type=data.get("entity_type"),
+                        entity_id=data.get("entity_id"),
+                        name=data.get("name"),
+                        attributes=data.get("attributes", {}),
+                    )
+                elif update_type == "knowledge":
+                    self.store.store_knowledge(
+                        topic=data.get("topic"),
+                        content=data.get("content"),
+                        source=data.get("source"),
+                    )
+                else:
+                    logger.warning(f"Unknown memory update type: {update_type}")
+            except Exception as e:
+                logger.warning(f"Failed to persist memory update ({update_type}): {e}")
+
     # ============== Public Methods ==============
 
     async def run(
         self,
         question: str,
         conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
@@ -671,30 +838,68 @@ class LangGraphAgent:
         Args:
             question: User's question.
             conversation_id: Optional conversation ID.
+            user_id: Optional user ID for personalized long-term memory.
             history: Optional conversation history.
 
         Returns:
             Dict with response, tool_calls, thoughts, and plan.
         """
+        # Track total execution time
+        total_start_time = time.time()
+
+        # 创建增强日志上下文
+        request_id = str(uuid.uuid4())[:8]
+        log_ctx = LogContext(module="Agent", request_id=request_id, session_id=conversation_id)
+        agent_logger = AgentLogger(request_id=request_id)
+
+        # 记录 Agent 运行开始
+        agent_logger.start_run(question, self.max_iterations)
+
+        # 记录配置信息
+        available_tools = [t.name for t in self.tools.get_all()]
+        log_step(log_ctx, "Init", f"LangGraph Agent 启动")
+        log_step(log_ctx, "Init", f"可用工具: {available_tools}")
+        log_step(log_ctx, "Init", f"最大迭代: {self.max_iterations}, 规划: {self.enable_planning}, 并行工具: {self.enable_parallel_tools}")
+
+        # Load long-term memory context if store is available
+        long_term_memory = None
+        if self.store and user_id:
+            log_step(log_ctx, "LongTermMemory", f"加载用户 [{user_id}] 的长期记忆")
+            try:
+                long_term_memory = await self._load_long_term_memory(user_id, question)
+                if long_term_memory:
+                    pref_count = len(long_term_memory.user_preferences)
+                    entity_count = len(long_term_memory.relevant_entities)
+                    knowledge_count = len(long_term_memory.relevant_knowledge)
+                    log_step(log_ctx, "LongTermMemory",
+                             f"已加载: 偏好={pref_count}, 实体={entity_count}, 知识={knowledge_count}")
+            except Exception as e:
+                logger.warning(f"Failed to load long-term memory: {e}")
+
         # Build messages
         messages = []
         if conversation_id:
             context = self.memory.get_context(conversation_id)
             messages.extend(context)
+            log_step(log_ctx, "Memory", f"加载历史上下文: {len(context)} 条消息")
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": question})
 
-        # Create initial state
+        # Create initial state with long-term memory
         state = create_graph_state(
             question=question,
             messages=messages,
             conversation_id=conversation_id,
+            user_id=user_id,
             max_iterations=self.max_iterations,
+            long_term_memory=long_term_memory,
         )
 
         # Generate session ID for tracing
         session_id = conversation_id or str(uuid.uuid4())
+
+        log_step(log_ctx, "Graph", "开始执行状态图...")
 
         # Run with tracing
         with self.tracer.trace(
@@ -711,14 +916,39 @@ class LangGraphAgent:
                 # Run the graph
                 final_state = await self.compiled_graph.ainvoke(state)
 
+                # 记录执行结果
+                iterations = final_state.get("iteration", 0)
+                tool_calls_count = len(final_state.get("tool_calls", []))
+                plan_steps = len(final_state.get("plan", [])) if final_state.get("plan") else 0
+
+                log_step(log_ctx, "Graph", f"状态图执行完成 - 迭代: {iterations}, 工具调用: {tool_calls_count}, 规划步骤: {plan_steps}")
+
+                # 记录思考过程
+                for i, thought in enumerate(final_state.get("thoughts", []), 1):
+                    thought_text = thought.thought if hasattr(thought, 'thought') else str(thought)
+                    action = thought.action if hasattr(thought, 'action') else None
+                    agent_logger.log_thinking(i, thought_text, action)
+
+                # 记录工具调用
+                for tc in final_state.get("tool_calls", []):
+                    tc_name = tc.name if hasattr(tc, 'name') else tc.get('name', 'unknown')
+                    tc_result = tc.result if hasattr(tc, 'result') else tc.get('result')
+                    tc_error = tc.error if hasattr(tc, 'error') else tc.get('error')
+                    tc_duration = tc.duration_ms if hasattr(tc, 'duration_ms') else tc.get('duration_ms', 0)
+                    if tc_result:
+                        agent_logger.log_observation(tc_name, True, str(tc_result)[:100], tc_duration)
+                    elif tc_error:
+                        agent_logger.log_observation(tc_name, False, tc_error, tc_duration)
+
                 trace.update(output={
                     "response": final_state.get("final_response"),
-                    "iterations": final_state.get("iteration"),
-                    "tool_calls_count": len(final_state.get("tool_calls", [])),
-                    "plan_steps": len(final_state.get("plan", [])) if final_state.get("plan") else 0,
+                    "iterations": iterations,
+                    "tool_calls_count": tool_calls_count,
+                    "plan_steps": plan_steps,
                 })
             except Exception as e:
                 logger.error(f"LangGraph agent error: {e}")
+                log_step(log_ctx, "Error", f"Agent 运行错误: {str(e)[:100]}", level="error")
                 final_state = {
                     **state,
                     "error": str(e),
@@ -726,24 +956,62 @@ class LangGraphAgent:
                 }
                 trace.update(output={"error": str(e)})
 
-        # Update memory
+        # Calculate duration
+        total_duration_ms = int((time.time() - total_start_time) * 1000)
+
+        # Prepare result data
+        thoughts_data = [
+            t.model_dump() if hasattr(t, 'model_dump') else t
+            for t in final_state.get("thoughts", [])
+        ]
+        tool_calls_data = [
+            tc.model_dump() if hasattr(tc, 'model_dump') else tc
+            for tc in final_state.get("tool_calls", [])
+        ]
+
+        # Update memory with messages and interaction record
         if conversation_id:
+            log_step(log_ctx, "Memory", "更新对话记忆")
             await self.memory.add_message(conversation_id, "user", question)
             if final_state.get("final_response"):
                 await self.memory.add_message(
                     conversation_id, "assistant", final_state["final_response"]
                 )
 
+            # Record complete interaction for history viewing
+            await self.memory.add_interaction(
+                conversation_id=conversation_id,
+                interaction_id=request_id,
+                question=question,
+                response=final_state.get("final_response", ""),
+                thoughts=thoughts_data,
+                tool_calls=tool_calls_data,
+                iterations=final_state.get("iteration", 0),
+                duration_ms=total_duration_ms,
+                error=final_state.get("error"),
+            )
+
+        # Persist long-term memory updates if store is available
+        if self.store and user_id:
+            memory_updates = final_state.get("memory_updates", [])
+            if memory_updates:
+                log_step(log_ctx, "LongTermMemory", f"持久化 {len(memory_updates)} 条记忆更新")
+                try:
+                    await self._persist_memory_updates(user_id, memory_updates)
+                except Exception as e:
+                    logger.warning(f"Failed to persist memory updates: {e}")
+
+        # 记录运行结束
+        agent_logger.end_run(
+            success=final_state.get("error") is None,
+            iterations=final_state.get("iteration", 0),
+            tool_calls=len(final_state.get("tool_calls", []))
+        )
+
         return {
             "response": final_state.get("final_response", "抱歉，我无法回答这个问题。"),
-            "thoughts": [
-                t.model_dump() if hasattr(t, 'model_dump') else t
-                for t in final_state.get("thoughts", [])
-            ],
-            "tool_calls": [
-                tc.model_dump() if hasattr(tc, 'model_dump') else tc
-                for tc in final_state.get("tool_calls", [])
-            ],
+            "thoughts": thoughts_data,
+            "tool_calls": tool_calls_data,
             "plan": final_state.get("plan"),
             "conversation_id": conversation_id,
             "iterations": final_state.get("iteration", 0),
@@ -755,13 +1023,31 @@ class LangGraphAgent:
         self,
         question: str,
         conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ):
         """
         Stream LangGraph agent execution.
 
-        Yields state updates as the graph executes.
+        Args:
+            question: User's question.
+            conversation_id: Optional conversation ID.
+            user_id: Optional user ID for personalized long-term memory.
+            history: Optional conversation history.
+
+        Yields:
+            State updates as the graph executes.
         """
+        # Load long-term memory context if store is available
+        long_term_memory = None
+        if self.store and user_id:
+            try:
+                long_term_memory = await self._load_long_term_memory(user_id, question)
+                if long_term_memory:
+                    logger.debug(f"Loaded long-term memory for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Failed to load long-term memory: {e}")
+
         # Build messages
         messages = []
         if conversation_id:
@@ -771,12 +1057,14 @@ class LangGraphAgent:
             messages.extend(history)
         messages.append({"role": "user", "content": question})
 
-        # Create initial state
+        # Create initial state with long-term memory
         state = create_graph_state(
             question=question,
             messages=messages,
             conversation_id=conversation_id,
+            user_id=user_id,
             max_iterations=self.max_iterations,
+            long_term_memory=long_term_memory,
         )
 
         session_id = conversation_id or str(uuid.uuid4())
@@ -784,7 +1072,7 @@ class LangGraphAgent:
         with self.tracer.trace(
             name="langgraph_agent_stream",
             session_id=session_id,
-            metadata={"question": question, "streaming": True},
+            metadata={"question": question, "user_id": user_id, "streaming": True},
             tags=["agent", "langgraph", "streaming"],
         ) as trace:
             try:
@@ -804,6 +1092,16 @@ class LangGraphAgent:
 
                 # Get final state
                 final_state = await self.compiled_graph.ainvoke(state)
+
+                # Persist long-term memory updates if store is available
+                if self.store and user_id:
+                    memory_updates = final_state.get("memory_updates", [])
+                    if memory_updates:
+                        try:
+                            await self._persist_memory_updates(user_id, memory_updates)
+                            logger.debug(f"Persisted {len(memory_updates)} memory updates for user {user_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to persist memory updates: {e}")
 
                 yield {
                     "type": "response",
@@ -837,6 +1135,7 @@ def create_langgraph_agent(
     llm_manager,
     tool_registry: Optional[ToolRegistry] = None,
     memory_manager: Optional[MemoryManager] = None,
+    store_manager: Optional[StoreManager] = None,
     max_iterations: int = 10,
     enable_planning: bool = True,
     enable_parallel_tools: bool = True,
@@ -849,7 +1148,8 @@ def create_langgraph_agent(
     Args:
         llm_manager: LLM manager for reasoning.
         tool_registry: Registry of available tools.
-        memory_manager: Memory manager for conversations.
+        memory_manager: Memory manager for conversations (short-term).
+        store_manager: Store manager for long-term memory (cross-session).
         max_iterations: Maximum reasoning iterations.
         enable_planning: Enable task planning for complex questions.
         enable_parallel_tools: Enable parallel tool execution.
@@ -867,6 +1167,7 @@ def create_langgraph_agent(
         llm_manager=llm_manager,
         tool_registry=tool_registry,
         memory_manager=memory_manager,
+        store_manager=store_manager,
         max_iterations=max_iterations,
         enable_planning=enable_planning,
         enable_parallel_tools=enable_parallel_tools,

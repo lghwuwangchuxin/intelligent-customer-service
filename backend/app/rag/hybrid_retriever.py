@@ -458,12 +458,51 @@ class HybridRetriever(BaseRetriever):
         retriever = self._index_manager.get_retriever(similarity_top_k=self.top_k)
         return retriever.retrieve(query_bundle)
 
+    def _preprocess_query(self, query: str) -> List[str]:
+        """
+        预处理查询文本，包括分词和同义词扩展。
+
+        Args:
+            query: 原始查询字符串
+
+        Returns:
+            List[str]: 分词后的词列表（包含同义词）
+        """
+        # 常用同义词映射（提高召回率）
+        synonyms = {
+            "付款": ["支付", "付费", "缴费", "交费"],
+            "支付": ["付款", "付费", "缴费"],
+            "退款": ["退钱", "退费", "返款"],
+            "退货": ["退换", "退换货", "换货"],
+            "价格": ["价钱", "费用", "多少钱"],
+            "怎么": ["如何", "怎样", "咋"],
+            "查询": ["查看", "查找", "搜索"],
+            "订单": ["订购", "购买记录"],
+            "快递": ["物流", "配送", "发货"],
+            "账户": ["账号", "用户"],
+            "密码": ["口令", "密钥"],
+            "登录": ["登陆", "登入"],
+            "注册": ["注冊", "开户"],
+        }
+
+        # 使用 jieba 分词
+        tokens = list(jieba.cut(query))
+
+        # 添加同义词扩展
+        expanded_tokens = list(tokens)  # 复制原始分词结果
+        for token in tokens:
+            if token in synonyms:
+                expanded_tokens.extend(synonyms[token])
+
+        logger.debug(f"[HybridRetriever] Query preprocessing: {query} -> {expanded_tokens}")
+        return expanded_tokens
+
     def _bm25_retrieve(self, query: str) -> List[NodeWithScore]:
         """
         执行 BM25 关键词检索。
 
         使用 BM25 算法基于词频统计计算查询与文档的相关性分数。
-        查询文本会先经过 jieba 分词处理。
+        查询文本会先经过 jieba 分词和同义词扩展处理。
 
         Args:
             query: 查询字符串
@@ -472,16 +511,24 @@ class HybridRetriever(BaseRetriever):
             List[NodeWithScore]: BM25 检索结果，按分数降序排列
         """
         if self._bm25 is None or not self._corpus_nodes:
+            logger.warning("[HybridRetriever] BM25 index not ready, returning empty results")
             return []
 
-        # 使用 jieba 对查询进行分词
-        tokenized_query = list(jieba.cut(query))
+        # 使用增强的查询预处理（分词 + 同义词扩展）
+        tokenized_query = self._preprocess_query(query)
 
         # 计算 BM25 分数
         scores = self._bm25.get_scores(tokenized_query)
 
-        # 记录原始分数用于调试
-        logger.debug(f"[HybridRetriever] BM25 raw scores: {scores}")
+        # 记录分数统计信息
+        if len(scores) > 0:
+            max_score = max(scores)
+            min_score = min(scores)
+            avg_score = sum(scores) / len(scores)
+            logger.debug(
+                f"[HybridRetriever] BM25 scores - max: {max_score:.4f}, "
+                f"min: {min_score:.4f}, avg: {avg_score:.4f}"
+            )
 
         # 创建结果列表
         # 注意：BM25Okapi 可能产生负分（当词在所有文档中出现时 IDF 为负）
@@ -497,7 +544,7 @@ class HybridRetriever(BaseRetriever):
         # 按分数降序排列（分数越高匹配越好，即使是负数也有相对排序意义）
         results.sort(key=lambda x: x.score, reverse=True)
 
-        logger.debug(f"[HybridRetriever] BM25 returning {len(results)} results")
+        logger.info(f"[HybridRetriever] BM25 returning {len(results)} results for query: '{query[:30]}...'")
         return results[:self.top_k]
 
     def _rrf_fusion(
