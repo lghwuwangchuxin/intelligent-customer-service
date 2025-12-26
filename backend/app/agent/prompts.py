@@ -36,28 +36,31 @@ AGENT_SYSTEM_PROMPT = """你是一个智能客服助手，能够通过工具来�
 现在，请根据用户的问题进行思考和行动。"""
 
 # Thought generation prompt
-THOUGHT_PROMPT = """基于当前对话和用户的问题，请思考下一步应该做什么。
+THOUGHT_PROMPT = """分析用户问题，决定下一步行动。
 
 用户问题: {question}
 
-已有的观察结果:
+已有观察:
 {observations}
 
-## 工具选择指南
-1. 对于公司业务相关问题（如支付方式、产品信息、服务条款），优先使用 knowledge_search
-2. 如果 knowledge_search 未找到有效结果，使用 web_search 进行百度搜索
-3. 如果需要详细了解某个网页内容，使用 web_fetch
-4. 如果已经有足够信息，选择"回答"作为行动
+## 快速决策指南
+**直接回答（选择"回答"）**：
+- 问候语（你好、hi、早上好等）
+- 闲聊（你是谁、你叫什么）
+- 已有足够信息回答的问题
+- 通用常识问题
 
-请按以下格式回答：
-思考: [你的思考过程，说明为什么选择这个工具]
-行动: [选择的工具名称: knowledge_search / web_search / web_fetch / 回答]
-行动输入: {{"query": "搜索关键词"}} 或 {{"url": "网页地址"}}
+**使用 knowledge_search**：
+- 公司业务、产品、服务、政策类问题
+- 需要查找具体信息的问题
 
-示例：
-思考: 用户询问支付方式，这是公司业务信息，应该先搜索知识库
-行动: knowledge_search
-行动输入: {{"query": "支付方式"}}"""
+**使用 web_search**（仅当 knowledge_search 无结果时）：
+- 需要最新资讯的问题
+
+格式：
+思考: [简短思考，1-2句]
+行动: [回答 / knowledge_search / web_search]
+行动输入: {{"query": "关键词"}}"""
 
 # Final response prompt
 FINAL_RESPONSE_PROMPT = """基于以下信息，生成对用户问题的最终回答。

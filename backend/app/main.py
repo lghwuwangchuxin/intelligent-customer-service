@@ -111,8 +111,17 @@ async def lifespan(app: FastAPI):
     # This ensures embedding models are loaded before handling requests
     try:
         logger.info("[Startup] Initializing services asynchronously...")
-        await async_init_services()
+        services = await async_init_services()
         logger.info("[Startup] All services initialized successfully")
+
+        # Load persisted conversation memories
+        memory_manager = services.get('memory_manager')
+        if memory_manager and memory_manager.persist_path:
+            try:
+                loaded_count = await memory_manager.load_persisted_memories()
+                logger.info(f"[Startup] Loaded {loaded_count} persisted conversations from {memory_manager.persist_path}")
+            except Exception as e:
+                logger.warning(f"[Startup] Failed to load persisted memories: {e}")
     except Exception as e:
         logger.warning(f"[Startup] Services initialization warning (non-critical): {e}")
 

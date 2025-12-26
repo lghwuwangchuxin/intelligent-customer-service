@@ -99,6 +99,50 @@ class ReActAgent:
         self.max_iterations = max_iterations
         self.tracer = tracer or get_tracer()
 
+    def _is_simple_question(self, question: str) -> bool:
+        """Check if the question is simple and can be answered directly without tools."""
+        question_lower = question.lower().strip()
+
+        # Simple greetings
+        greetings = ['你好', '您好', 'hi', 'hello', '早上好', '下午好', '晚上好', '嗨', 'hey']
+        if any(question_lower.startswith(g) or question_lower == g for g in greetings):
+            return True
+
+        # Identity questions
+        identity_keywords = ['你是谁', '你叫什么', '你是什么', '介绍一下你自己', '你的名字']
+        if any(k in question_lower for k in identity_keywords):
+            return True
+
+        # Very short questions that are likely greetings
+        if len(question) <= 5 and not any(c in question for c in ['?', '？', '怎么', '如何', '什么']):
+            return True
+
+        return False
+
+    async def _quick_response(self, question: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
+        """Generate a quick response for simple questions without tool calls."""
+        messages = [
+            {"role": "system", "content": "你是一个友好的智能客服助手。请简洁、热情地回答用户。"},
+            {"role": "user", "content": question}
+        ]
+
+        response = await self.llm.ainvoke(messages)
+
+        # Update memory
+        if conversation_id:
+            await self.memory.add_message(conversation_id, "user", question)
+            await self.memory.add_message(conversation_id, "assistant", response)
+
+        return {
+            "response": response,
+            "thoughts": [],
+            "tool_calls": [],
+            "conversation_id": conversation_id,
+            "iterations": 0,
+            "error": None,
+            "quick_response": True,
+        }
+
     async def run(
         self,
         question: str,
@@ -118,6 +162,11 @@ class ReActAgent:
         Returns:
             Dict with response, tool_calls, and thoughts.
         """
+        # Quick response for simple questions (greetings, identity, etc.)
+        if self._is_simple_question(question):
+            logger.info(f"[Agent] 简单问题快速回答: {question[:30]}...")
+            return await self._quick_response(question, conversation_id)
+
         # 创建增强日志上下文
         request_id = str(uuid.uuid4())[:8]
         log_ctx = LogContext(module="Agent", request_id=request_id, session_id=conversation_id)

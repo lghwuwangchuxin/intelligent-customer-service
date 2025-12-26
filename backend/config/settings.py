@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     AGENT_MAX_ITERATIONS: int = 10
     AGENT_MEMORY_MAX_MESSAGES: int = 50
     AGENT_MEMORY_SUMMARY_THRESHOLD: int = 20
+    AGENT_MEMORY_PERSIST_PATH: str = "./data/conversations"  # Path to persist conversation history
 
     # LangGraph Agent (Advanced)
     AGENT_ENABLE_PLANNING: bool = True

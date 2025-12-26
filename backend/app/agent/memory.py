@@ -196,6 +196,12 @@ class MemoryManager:
         memory = self.get_or_create(conversation_id)
         memory.add_message(role, content)
 
+        # Auto-generate title from first user message
+        if not memory.title and role == "user":
+            memory.title = content[:50].strip()
+            if len(content) > 50:
+                memory.title += "..."
+
         # 记录添加消息
         _memory_logger.log_add_message(conversation_id, role, len(memory.messages))
 
@@ -203,6 +209,10 @@ class MemoryManager:
         if len(memory.messages) >= self.summary_threshold:
             logger.info(f"[Memory] 会话 {conversation_id[:8]} 消息数 ({len(memory.messages)}) 达到阈值 ({self.summary_threshold})，触发摘要")
             await self._summarize(memory)
+
+        # Persist if enabled
+        if self.persist_path:
+            await self._persist_memory(memory)
 
         logger.debug(
             f"[Memory] 添加消息到会话 {conversation_id[:8]} | "
