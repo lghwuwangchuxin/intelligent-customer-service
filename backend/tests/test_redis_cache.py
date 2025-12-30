@@ -8,6 +8,7 @@ Run with: pytest tests/test_redis_cache.py -v
 
 import asyncio
 import pytest
+import pytest_asyncio
 import numpy as np
 from typing import List, Dict, Any
 
@@ -18,17 +19,25 @@ pytestmark = pytest.mark.asyncio
 class TestCacheManager:
     """Test the CacheManager from app.core.cache."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def cache_manager(self):
         """Create and return a cache manager instance."""
+        import app.core.cache as cache_module
+        # Reset global singleton to avoid event loop issues between tests
+        cache_module._cache_manager = None
+
         from app.core.cache import get_cache_manager
         manager = await get_cache_manager()
         yield manager
         # Cleanup
         try:
             await manager.clear_all()
+            await manager.close()
         except Exception:
             pass
+        finally:
+            # Reset singleton after test
+            cache_module._cache_manager = None
 
     async def test_cache_manager_initialization(self, cache_manager):
         """Test that cache manager initializes correctly."""
@@ -63,10 +72,12 @@ class TestCacheManager:
         # Set batch
         await cache_manager.set_embeddings_batch(contents, embeddings)
 
-        # Get batch
-        cached, indices = await cache_manager.get_embeddings_batch(contents)
+        # Get batch - returns (cached_embeddings, cached_indices, uncached_contents, uncached_indices)
+        cached, cached_indices, uncached_contents, uncached_indices = await cache_manager.get_embeddings_batch(contents)
         assert len(cached) == 3
-        assert len(indices) == 3
+        assert len(cached_indices) == 3
+        assert len(uncached_contents) == 0  # All should be cached
+        assert len(uncached_indices) == 0
         for i, (c, orig) in enumerate(zip(cached, embeddings)):
             assert c is not None
             np.testing.assert_array_almost_equal(c, orig, decimal=5)
@@ -113,7 +124,7 @@ class TestCacheManager:
 class TestSearchResultCache:
     """Test the SearchResultCache from knowledge.py."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def search_cache(self):
         """Create and return a search cache instance."""
         from app.mcp.tools.knowledge import SearchResultCache
@@ -168,7 +179,7 @@ class TestSearchResultCache:
 class TestEmbeddingCache:
     """Test the EmbeddingCache from postprocessor.py."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def embedding_cache(self):
         """Create and return an embedding cache instance."""
         from app.rag.postprocessor import EmbeddingCache
@@ -199,10 +210,13 @@ class TestEmbeddingCache:
         embeddings = [np.random.rand(1536).astype(np.float32) for _ in range(2)]
 
         await embedding_cache.aset_batch(contents, embeddings)
-        cached, indices = await embedding_cache.aget_batch(contents)
+        # aget_batch returns (cached_embeddings, cached_indices, uncached_contents, uncached_indices)
+        cached, cached_indices, uncached_contents, uncached_indices = await embedding_cache.aget_batch(contents)
 
         assert len(cached) == 2
-        assert len(indices) == 2
+        assert len(cached_indices) == 2
+        assert len(uncached_contents) == 0  # All should be cached
+        assert len(uncached_indices) == 0
         for c, orig in zip(cached, embeddings):
             assert c is not None
             np.testing.assert_array_almost_equal(c, orig, decimal=5)

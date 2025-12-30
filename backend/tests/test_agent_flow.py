@@ -25,10 +25,15 @@ from pathlib import Path
 from typing import Dict, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import settings
+
+# Mark all async tests
+pytestmark = pytest.mark.asyncio
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +56,7 @@ def test_llm_timeout_retry():
     )
 
     # 验证默认配置
-    assert DEFAULT_LLM_TIMEOUT == 120.0, f"默认超时应为 120s, 实际: {DEFAULT_LLM_TIMEOUT}"
+    assert DEFAULT_LLM_TIMEOUT == 300.0, f"默认超时应为 300s, 实际: {DEFAULT_LLM_TIMEOUT}"
     assert DEFAULT_MAX_RETRIES == 3, f"默认重试次数应为 3, 实际: {DEFAULT_MAX_RETRIES}"
     assert DEFAULT_RETRY_DELAY == 1.0, f"默认重试延迟应为 1s, 实际: {DEFAULT_RETRY_DELAY}"
     print(f"✓ 默认配置验证通过")
@@ -71,49 +76,52 @@ def test_llm_timeout_retry():
     return True
 
 
+def _check_ollama_available():
+    """检查 Ollama 服务是否可用"""
+    import httpx
+    try:
+        response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _check_ollama_available(), reason="Ollama service not available")
 async def test_llm_invoke_with_timeout():
     """测试 LLM 调用（需要 Ollama 运行）"""
     print("\n" + "=" * 60)
     print("测试 2: LLM 实际调用（带超时）")
     print("=" * 60)
 
-    try:
-        from app.core.llm_manager import LLMManager
+    from app.core.llm_manager import LLMManager
 
-        manager = LLMManager(
-            provider="ollama",
-            model="qwen3:latest",
-            temperature=0.1,
-            max_tokens=50,
-        )
-        print(f"✓ LLM Manager 初始化成功")
-        print(f"  - 提供商: {manager.provider}")
-        print(f"  - 模型: {manager.model}")
+    manager = LLMManager(
+        provider="ollama",
+        model="qwen3:latest",
+        temperature=0.1,
+        max_tokens=50,
+    )
+    print(f"✓ LLM Manager 初始化成功")
+    print(f"  - 提供商: {manager.provider}")
+    print(f"  - 模型: {manager.model}")
 
-        # 测试带超时的调用
-        messages = [{"role": "user", "content": "你好，请简短回复"}]
+    # 测试带超时的调用
+    messages = [{"role": "user", "content": "你好，请简短回复"}]
 
-        start = time.time()
-        response = await manager.ainvoke(
-            messages,
-            timeout=30.0,  # 30 秒超时
-            max_retries=1,  # 1 次重试
-        )
-        elapsed = time.time() - start
+    start = time.time()
+    response = await manager.ainvoke(
+        messages,
+        timeout=30.0,  # 30 秒超时
+        max_retries=1,  # 1 次重试
+    )
+    elapsed = time.time() - start
 
-        assert response is not None, "响应不应为空"
-        assert len(response) > 0, "响应长度应大于 0"
-        print(f"✓ LLM 调用成功")
-        print(f"  - 响应长度: {len(response)} 字符")
-        print(f"  - 耗时: {elapsed:.2f}s")
-        print(f"  - 响应预览: {response[:50]}...")
-
-        return True
-
-    except Exception as e:
-        print(f"⚠ LLM 调用测试跳过: {e}")
-        print("  (可能 Ollama 未运行或模型未加载)")
-        return False
+    assert response is not None, "响应不应为空"
+    assert len(response) > 0, "响应长度应大于 0"
+    print(f"✓ LLM 调用成功")
+    print(f"  - 响应长度: {len(response)} 字符")
+    print(f"  - 耗时: {elapsed:.2f}s")
+    print(f"  - 响应预览: {response[:50]}...")
 
 
 def test_tool_registry_timeout():
@@ -211,8 +219,8 @@ def test_knowledge_cache():
     for i in range(15):
         cache.set(f"query_{i}", 5, [{"content": f"result_{i}"}])
 
-    assert len(cache._cache) <= 10, "缓存应不超过 max_size"
-    print(f"✓ LRU 驱逐正常 (当前缓存: {len(cache._cache)} 条)")
+    assert len(cache._memory_cache) <= 10, "缓存应不超过 max_size"
+    print(f"✓ LRU 驱逐正常 (当前缓存: {len(cache._memory_cache)} 条)")
 
     # 测试全局缓存实例
     global_cache = get_search_cache()
@@ -222,6 +230,7 @@ def test_knowledge_cache():
     return True
 
 
+@pytest.mark.skipif(not _check_ollama_available(), reason="Ollama service not available")
 async def test_knowledge_search_with_cache():
     """测试 Knowledge Search 实际搜索（带缓存）"""
     print("\n" + "=" * 60)
@@ -263,9 +272,8 @@ async def test_knowledge_search_with_cache():
     stats = cache.get_stats()
     print(f"✓ 缓存状态: {stats}")
 
-    return True
 
-
+@pytest.mark.skipif(not _check_ollama_available(), reason="Ollama service not available")
 async def test_agent_react_loop():
     """测试 Agent ReAct 推理循环"""
     print("\n" + "=" * 60)
@@ -318,6 +326,7 @@ async def test_agent_react_loop():
         return False
 
 
+@pytest.mark.skipif(not _check_ollama_available(), reason="Ollama service not available")
 async def test_full_agent_with_tools():
     """测试完整 Agent 流程（带工具）"""
     print("\n" + "=" * 60)

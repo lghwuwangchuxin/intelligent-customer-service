@@ -6,11 +6,19 @@
 
 - [功能概述](#功能概述)
 - [快速开始](#快速开始)
+  - [环境要求](#环境要求)
+  - [安装 uv](#1-安装-uv-包管理器)
+  - [启动依赖服务](#2-启动依赖服务)
+  - [启动后端](#3-启动后端)
+  - [启动前端](#4-启动前端)
 - [配置说明](#配置说明)
 - [系统架构](#系统架构)
 - [API 接口](#api-接口)
 - [开发指南](#开发指南)
+  - [项目结构](#项目结构)
+  - [运行测试](#运行测试)
 - [常见问题](#常见问题)
+- [Docker Compose 部署](#docker-compose-部署)
 
 ---
 
@@ -50,17 +58,31 @@
 
 ### 环境要求
 
-| 软件 | 版本 | 必需 |
-|------|------|------|
-| Python | 3.11+ | ✅ |
-| Node.js | 18+ | ✅ |
-| Docker | 24+ | 推荐 |
-| Milvus | 2.5+ | ✅ |
-| Elasticsearch | 8.5+ | 可选 |
-| Redis | 7+ | 可选 |
-| Ollama | 0.12+ | 推荐 |
+| 软件 | 版本 | 必需 | 说明 |
+|------|------|------|------|
+| Python | 3.12+ (推荐 3.12) | ✅ | 3.13 部分依赖有兼容性问题 |
+| uv | 最新版 | ✅ | Python 包管理器 (推荐) |
+| Node.js | 18+ | ✅ | 前端开发 |
+| Docker | 24+ | 推荐 | 运行依赖服务 |
+| Milvus | 2.5+ | ✅ | 向量数据库 |
+| Elasticsearch | 8.5+ | 可选 | 混合检索 |
+| Redis | 7+ | 可选 | 缓存加速 |
+| Ollama | 0.12+ | 推荐 | 本地 LLM |
 
-### 1. 启动依赖服务
+### 1. 安装 uv 包管理器
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 或使用 pip
+pip install uv
+```
+
+### 2. 启动依赖服务
 
 ```bash
 # Milvus (向量数据库)
@@ -85,18 +107,69 @@ ollama pull qwen3:latest
 ollama pull nomic-embed-text
 ```
 
-### 2. 启动后端
+### 3. 启动后端
+
+#### 方式一：使用 uv (推荐)
 
 ```bash
 cd backend
-python -m venv .venv
+
+# 创建虚拟环境并安装依赖 (自动处理)
+uv venv --python 3.12
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+
+# 安装依赖
+uv pip install -r requirements.txt
+
+# 配置环境变量
 cp .env.example .env       # 编辑配置
+
+# 启动服务
 python run.py              # http://localhost:8000
 ```
 
-### 3. 启动前端
+#### 方式二：使用 pip
+
+```bash
+cd backend
+
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 配置环境变量
+cp .env.example .env       # 编辑配置
+
+# 启动服务
+python run.py              # http://localhost:8000
+```
+
+#### 依赖安装说明
+
+| 依赖包 | 说明 | 注意事项 |
+|--------|------|----------|
+| `llama-index-*` | LlamaIndex 核心及扩展 | 需要安装多个子包 |
+| `langchain-*` | LangChain 生态 | 包括 core, ollama, milvus 等 |
+| `sentence-transformers` | 重排序模型 | 依赖 PyTorch，Python 3.13 可能不兼容 |
+| `pymilvus` | Milvus 客户端 | 版本需 >= 2.5.4 |
+| `langfuse` | 可观测性 | 可选，用于追踪监控 |
+
+**Python 3.13 兼容性问题**：
+
+如果使用 Python 3.13，`sentence-transformers` 可能无法安装（依赖 PyTorch）。可以跳过安装：
+
+```bash
+# 安装时排除 sentence-transformers
+grep -v "sentence-transformers" requirements.txt > /tmp/req.txt
+uv pip install -r /tmp/req.txt
+```
+
+系统会自动降级，使用基础重排序功能。
+
+### 4. 启动前端
 
 ```bash
 cd frontend
@@ -104,7 +177,7 @@ npm install
 npm run dev                # http://localhost:3000
 ```
 
-### 4. 验证部署
+### 5. 验证部署
 
 ```bash
 # 健康检查
@@ -422,10 +495,91 @@ registry.register(MyTool())
 
 ### 运行测试
 
+#### 环境准备
+
 ```bash
 cd backend
+source .venv/bin/activate  # 激活虚拟环境
+
+# 确保测试依赖已安装
+uv pip install pytest pytest-asyncio
+```
+
+#### 运行所有测试
+
+```bash
+# 运行全部测试
 python -m pytest tests/ -v
-python tests/test_embedding_optimization.py  # Embedding 性能测试
+
+# 运行测试并显示详细输出
+python -m pytest tests/ -v --tb=short
+
+# 运行测试并生成覆盖率报告
+python -m pytest tests/ -v --cov=app --cov-report=html
+```
+
+#### 运行特定测试模块
+
+| 测试模块 | 说明 | 命令 |
+|----------|------|------|
+| `test_langfuse_integration.py` | Langfuse 可观测性集成 | `pytest tests/test_langfuse_integration.py -v` |
+| `test_rag_flow.py` | RAG 检索流程 | `pytest tests/test_rag_flow.py -v` |
+| `test_ddd_architecture.py` | DDD 架构和实体 | `pytest tests/test_ddd_architecture.py -v` |
+| `test_agent_flow.py` | Agent 工具调用 | `pytest tests/test_agent_flow.py -v` |
+| `test_redis_cache.py` | Redis 缓存功能 | `pytest tests/test_redis_cache.py -v` |
+| `test_embedding_optimization.py` | Embedding 性能 | `pytest tests/test_embedding_optimization.py -v` |
+| `test_api_endpoints.py` | API 端点测试 | `pytest tests/test_api_endpoints.py -v` |
+
+#### 测试示例
+
+```bash
+# 测试 Vector Store (验证 Milvus 集成)
+python -m pytest tests/test_langfuse_integration.py::test_vector_store_tracing -v
+
+# 测试混合检索器
+python -m pytest tests/test_rag_flow.py::test_hybrid_retriever -v
+
+# 测试 DDD 实体
+python -m pytest tests/test_ddd_architecture.py -v
+
+# 快速冒烟测试 (跳过慢速测试)
+python -m pytest tests/ -v -m "not slow"
+```
+
+#### 测试依赖服务
+
+部分测试需要依赖服务运行：
+
+| 服务 | 需要的测试 | 说明 |
+|------|-----------|------|
+| Milvus | `test_rag_flow.py` | 向量存储测试 |
+| Redis | `test_redis_cache.py` | 缓存测试 (部分会跳过) |
+| Ollama | `test_embedding_optimization.py` | Embedding 测试 |
+
+```bash
+# 检查服务状态
+docker ps | grep -E "milvus|redis"
+curl http://localhost:11434/api/tags  # Ollama
+```
+
+#### 常见测试问题
+
+**ModuleNotFoundError**
+```bash
+# 确保依赖已安装
+uv pip install -r requirements.txt
+```
+
+**测试超时**
+```bash
+# 增加超时时间
+python -m pytest tests/ -v --timeout=300
+```
+
+**跳过需要外部服务的测试**
+```bash
+# 只运行不需要外部服务的测试
+python -m pytest tests/test_ddd_architecture.py tests/test_logging.py -v
 ```
 
 ---

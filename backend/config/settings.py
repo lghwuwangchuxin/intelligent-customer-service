@@ -2,7 +2,7 @@
 Configuration settings for the intelligent customer service system.
 Based on patterns from Langchain and Dify projects.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
 
@@ -161,10 +161,11 @@ class Settings(BaseSettings):
     LOG_RAGAS_SEPARATE: bool = True  # Separate log file for RAG quality evaluation
     LOG_CLEANUP_DAYS: int = 30  # Days to keep old log files
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
 
 
 @lru_cache()

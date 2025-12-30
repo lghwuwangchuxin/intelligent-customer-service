@@ -17,10 +17,26 @@ import logging
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import settings
+
+# Mark all async tests
+pytestmark = pytest.mark.asyncio
+
+
+def _check_ollama_available():
+    """检查 Ollama 服务是否可用"""
+    import httpx
+    try:
+        response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
 
 logging.basicConfig(
     level=logging.INFO,

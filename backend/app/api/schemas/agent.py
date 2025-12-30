@@ -179,8 +179,8 @@ class KnowledgeRequest(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 
-class KnowledgeResponse(BaseModel):
-    """Knowledge response."""
+class MemoryKnowledgeResponse(BaseModel):
+    """Memory knowledge response (long-term memory)."""
     key: str
     topic: str
     content: str

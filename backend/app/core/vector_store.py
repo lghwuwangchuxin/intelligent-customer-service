@@ -81,6 +81,8 @@ import logging
 import time
 from typing import List, Dict, Any, Optional, Union
 
+from pydantic import ConfigDict
+
 from llama_index.core import (
     VectorStoreIndex,
     StorageContext,
@@ -121,8 +123,7 @@ class VectorStoreRetriever(BaseRetriever):
     manager: Any  # VectorStoreManager instance
     top_k: int = 5
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def _get_relevant_documents(
         self,

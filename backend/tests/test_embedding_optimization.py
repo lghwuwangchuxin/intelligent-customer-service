@@ -16,10 +16,25 @@ import time
 import sys
 import os
 
+import pytest
+
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import logging
+
+# Mark all async tests
+pytestmark = pytest.mark.asyncio
+
+
+def _check_ollama_available():
+    """检查 Ollama 服务是否可用"""
+    import httpx
+    try:
+        response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        return False
 
 logging.basicConfig(
     level=logging.INFO,
