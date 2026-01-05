@@ -1,0 +1,229 @@
+# A2A Agents Docker Compose
+# ==========================
+# Specialized A2A agents for multi-agent coordination
+#
+# Prerequisites:
+#   Start infrastructure first: docker-compose -f docker-compose.infra.yml up -d
+#   Start services (optional): docker-compose -f docker-compose.services.yml up -d
+#
+# Usage:
+#   Start all agents: docker-compose -f docker-compose.agents.yml up -d
+#   Start specific agents: docker-compose -f docker-compose.agents.yml up -d travel-assistant charging-manager
+#   View logs: docker-compose -f docker-compose.agents.yml logs -f
+#   Stop all: docker-compose -f docker-compose.agents.yml down
+
+version: '3.8'
+
+# Common environment variables for all agents
+x-agent-env: &agent-env
+  # LLM Configuration
+  LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+  LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.7}
+  LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4096}
+  # Agent Configuration
+  AGENT_HOST: "0.0.0.0"
+  # Nacos Configuration
+  NACOS_SERVER_ADDRESSES: ${NACOS_SERVER_ADDRESSES:-nacos:8848}
+  NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+  NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
+  NACOS_ENABLED: "true"
+  # Logging
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_DIR: /app/logs
+  LOG_TO_CONSOLE: "true"
+  LOG_TO_FILE: "true"
+  # Langfuse (optional monitoring)
+  LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+  # Agent URLs for inter-agent communication
+  AGENT_TRAVEL_ASSISTANT_URL: http://travel-assistant:9101
+  AGENT_CHARGING_MANAGER_URL: http://charging-manager:9002
+  AGENT_BILLING_ADVISOR_URL: http://billing-advisor:9003
+  AGENT_EMERGENCY_SUPPORT_URL: http://emergency-support:9004
+  AGENT_DATA_ANALYST_URL: http://data-analyst:9005
+  AGENT_MAINTENANCE_EXPERT_URL: http://maintenance-expert:9006
+  AGENT_ENERGY_ADVISOR_URL: http://energy-advisor:9007
+  AGENT_SCHEDULING_ADVISOR_URL: http://scheduling-advisor:9008
+
+# Common service configuration
+x-agent-common: &agent-common
+  restart: unless-stopped
+  networks:
+    - ics-network
+  volumes:
+    - agent-logs:/app/logs
+
+services:
+  # ============================================
+  # Charging Domain Agents (For Car Owners)
+  # ============================================
+
+  travel-assistant:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/travel_assistant/Dockerfile
+    container_name: agent-travel-assistant
+    ports:
+      - "9101:9101"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: travel_assistant
+      AGENT_PORT: "9101"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9101/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  charging-manager:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/charging_manager/Dockerfile
+    container_name: agent-charging-manager
+    ports:
+      - "9002:9002"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: charging_manager
+      AGENT_PORT: "9002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  billing-advisor:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/billing_advisor/Dockerfile
+    container_name: agent-billing-advisor
+    ports:
+      - "9003:9003"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: billing_advisor
+      AGENT_PORT: "9003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9003/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  emergency-support:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/emergency_support/Dockerfile
+    container_name: agent-emergency-support
+    ports:
+      - "9004:9004"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: emergency_support
+      AGENT_PORT: "9004"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9004/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # Energy Management Agents (For Operators)
+  # ============================================
+
+  data-analyst:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/data_analyst/Dockerfile
+    container_name: agent-data-analyst
+    ports:
+      - "9005:9005"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: data_analyst
+      AGENT_PORT: "9005"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9005/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  maintenance-expert:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/maintenance_expert/Dockerfile
+    container_name: agent-maintenance-expert
+    ports:
+      - "9006:9006"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: maintenance_expert
+      AGENT_PORT: "9006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9006/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  energy-advisor:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/energy_advisor/Dockerfile
+    container_name: agent-energy-advisor
+    ports:
+      - "9007:9007"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: energy_advisor
+      AGENT_PORT: "9007"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9007/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  scheduling-advisor:
+    <<: *agent-common
+    build:
+      context: ./backend/app/agents
+      dockerfile: specialized/scheduling_advisor/Dockerfile
+    container_name: agent-scheduling-advisor
+    ports:
+      - "9008:9008"
+    environment:
+      <<: *agent-env
+      AGENT_NAME: scheduling_advisor
+      AGENT_PORT: "9008"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9008/.well-known/agent.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  ics-network:
+    external: true
+    name: ics-infra-network
+
+volumes:
+  agent-logs:
+    name: ics-agent-logs

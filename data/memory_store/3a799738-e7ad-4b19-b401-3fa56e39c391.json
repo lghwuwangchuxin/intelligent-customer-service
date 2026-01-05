@@ -1,0 +1,26 @@
+{
+  "conversation_id": "3a799738-e7ad-4b19-b401-3fa56e39c391",
+  "title": "电费咨询",
+  "messages": [
+    {
+      "role": "user",
+      "content": "你好，我想查询一下本月的电费账单",
+      "timestamp": "2026-01-05T03:25:28.088645"
+    },
+    {
+      "role": "assistant",
+      "content": "您好！我可以帮您查询电费账单。请问您的户号是多少？",
+      "timestamp": "2026-01-05T03:25:28.102695"
+    },
+    {
+      "role": "user",
+      "content": "我的户号是 1234567890",
+      "timestamp": "2026-01-05T03:25:28.114573"
+    }
+  ],
+  "interactions": [],
+  "summary": null,
+  "created_at": "2026-01-05T03:25:28.025984",
+  "updated_at": "2026-01-05T03:25:28.114581",
+  "metadata": {}
+}

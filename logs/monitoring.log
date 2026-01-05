@@ -1,0 +1,14 @@
+{"timestamp": "2026-01-05T02:27:50.195126Z", "level": "INFO", "logger": "monitoring-service", "message": "Logging initialized for monitoring-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:27:50.195471Z", "level": "INFO", "logger": "monitoring-service", "message": "Starting monitoring-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:27:50.195537Z", "level": "INFO", "logger": "monitoring-service", "message": "Configuration: host=0.0.0.0, port=8004", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:27:50.195594Z", "level": "INFO", "logger": "monitoring-service", "message": "Langfuse enabled: True", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:27:50.205606Z", "level": "INFO", "logger": "monitoring-service", "message": "monitoring-service starting on http://0.0.0.0:8004", "module": "run", "function": "main", "line": 62}
+INFO:     Started server process [14560]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-01-05T02:27:50.261530Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:27:50.261681Z", "level": "INFO", "logger": "services.monitoring_service.server", "message": "Monitoring Service started", "module": "server", "function": "_on_startup", "line": 109}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8004 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57707 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59460 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61111 - "GET /api/metrics HTTP/1.1" 200 OK

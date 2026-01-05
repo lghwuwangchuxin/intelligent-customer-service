@@ -1,0 +1,15 @@
+{"timestamp": "2026-01-05T02:27:51.767921Z", "level": "INFO", "logger": "evaluation-service", "message": "Logging initialized for evaluation-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:27:51.768244Z", "level": "INFO", "logger": "evaluation-service", "message": "Starting evaluation-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:27:51.768315Z", "level": "INFO", "logger": "evaluation-service", "message": "Configuration: host=0.0.0.0, port=8003", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:27:51.768373Z", "level": "INFO", "logger": "evaluation-service", "message": "Redis: redis://localhost:6379/0", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:27:51.794615Z", "level": "INFO", "logger": "evaluation-service", "message": "evaluation-service starting on http://0.0.0.0:8003", "module": "run", "function": "main", "line": 62}
+INFO:     Started server process [14596]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-01-05T02:27:51.852576Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:27:51.852722Z", "level": "INFO", "logger": "services.evaluation_service.server", "message": "Evaluation Service started", "module": "server", "function": "_on_startup", "line": 114}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8003 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57708 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59459 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61136 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61171 - "GET /api/evaluations HTTP/1.1" 200 OK

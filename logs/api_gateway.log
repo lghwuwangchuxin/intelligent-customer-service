@@ -1,0 +1,28 @@
+{"timestamp": "2026-01-05T03:03:23.135723Z", "level": "INFO", "logger": "api-gateway", "message": "Logging initialized for api-gateway", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T03:03:23.136093Z", "level": "INFO", "logger": "api-gateway", "message": "Starting api-gateway...", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T03:03:23.136176Z", "level": "INFO", "logger": "api-gateway", "message": "Configuration: host=0.0.0.0, port=8000", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T03:03:23.136252Z", "level": "INFO", "logger": "api-gateway", "message": "Nacos enabled: False", "module": "run", "function": "main", "line": 55}
+{"timestamp": "2026-01-05T03:03:23.147610Z", "level": "INFO", "logger": "api-gateway", "message": "api-gateway starting on http://0.0.0.0:8000", "module": "run", "function": "main", "line": 62}
+INFO:     Started server process [29708]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-01-05T03:03:23.190173Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T03:03:23.190614Z", "level": "INFO", "logger": "api-gateway", "message": "Logging initialized for api-gateway", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T03:03:23.190706Z", "level": "INFO", "logger": "services.api_gateway.app", "message": "Starting API Gateway...", "module": "app", "function": "on_startup", "line": 48}
+{"timestamp": "2026-01-05T03:03:23.242636Z", "level": "INFO", "logger": "services.common.service_client", "message": "Service client initialized", "module": "service_client", "function": "initialize", "line": 117}
+{"timestamp": "2026-01-05T03:03:23.242776Z", "level": "INFO", "logger": "services.api_gateway.app", "message": "Service clients initialized", "module": "app", "function": "on_startup", "line": 75}
+{"timestamp": "2026-01-05T03:03:23.242849Z", "level": "INFO", "logger": "services.api_gateway.app", "message": "API Gateway started", "module": "app", "function": "on_startup", "line": 80}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49541 - "GET /health HTTP/1.1" 200 OK
+{"timestamp": "2026-01-05T03:03:55.186681Z", "level": "INFO", "logger": "nacos.client", "message": "user server address  localhost:8848", "module": "client", "function": "__init__", "line": 288}
+{"timestamp": "2026-01-05T03:03:55.186913Z", "level": "INFO", "logger": "nacos.client", "message": "[client-init] endpoint:None, tenant:public", "module": "client", "function": "__init__", "line": 349}
+{"timestamp": "2026-01-05T03:03:55.187583Z", "level": "INFO", "logger": "nacos.client", "message": "[list-naming-instance] service_name:single-agent-service, namespace:public", "module": "client", "function": "list_naming_instance", "line": 1096}
+{"timestamp": "2026-01-05T03:03:55.194640Z", "level": "INFO", "logger": "nacos.client", "message": "[list-naming-instance] service_name:single-agent-service, namespace:public, server response:b'{\"name\":\"DEFAULT_GROUP@@single-agent-service\",\"groupName\":\"DEFAULT_GROUP\",\"clusters\":\"\",\"cacheMillis\":10000,\"hosts\":[],\"lastRefTime\":1767582235214,\"checksum\":\"\",\"allIPs\":false,\"reachProtectionThreshold\":false,\"valid\":true}'", "module": "client", "function": "list_naming_instance", "line": 1118}
+INFO:     127.0.0.1:49648 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63688 - "GET /api/memory/conversations?page=1&page_size=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63690 - "GET /api/system/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63693 - "GET /api/memory/conversations?page=1&page_size=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63694 - "GET /api/system/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63707 - "GET /api/a2a/agents HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63797 - "GET /api/memory/conversations?page=1&page_size=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63802 - "POST /api/a2a/chat HTTP/1.1" 404 Not Found

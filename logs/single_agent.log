@@ -1,0 +1,16 @@
+{"timestamp": "2026-01-05T02:58:19.781853Z", "level": "INFO", "logger": "single-agent-service", "message": "Logging initialized for single-agent-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:58:19.782179Z", "level": "INFO", "logger": "single-agent-service", "message": "Starting single-agent-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:58:19.782257Z", "level": "INFO", "logger": "single-agent-service", "message": "Configuration: host=0.0.0.0, port=8005", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:58:19.782322Z", "level": "INFO", "logger": "single-agent-service", "message": "LLM: ollama - qwen3:latest @ http://localhost:11434", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:58:19.789262Z", "level": "INFO", "logger": "services.single_agent_service.service", "message": "LLM client initialized: ollama - qwen3:latest @ http://localhost:11434", "module": "service", "function": "from_config", "line": 175}
+{"timestamp": "2026-01-05T02:58:19.789366Z", "level": "INFO", "logger": "single-agent-service", "message": "single-agent-service starting on http://0.0.0.0:8005", "module": "run", "function": "main", "line": 62}
+INFO:     Started server process [25834]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-01-05T02:58:19.830199Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:58:19.830351Z", "level": "INFO", "logger": "services.single_agent_service.server", "message": "Single Agent Service started", "module": "server", "function": "_on_startup", "line": 110}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8005 (Press CTRL+C to quit)
+INFO:     127.0.0.1:64777 - "GET /health HTTP/1.1" 200 OK
+{"timestamp": "2026-01-05T02:58:54.060900Z", "level": "INFO", "logger": "services.single_agent_service.service", "message": "Single Agent Service initialized", "module": "service", "function": "initialize", "line": 197}
+INFO:     127.0.0.1:64908 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49651 - "POST /api/chat HTTP/1.1" 200 OK

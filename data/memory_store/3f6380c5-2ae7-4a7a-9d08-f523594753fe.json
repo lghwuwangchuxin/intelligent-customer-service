@@ -1,0 +1,16 @@
+{
+  "conversation_id": "3f6380c5-2ae7-4a7a-9d08-f523594753fe",
+  "title": "测试对话",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, I need help",
+      "timestamp": "2026-01-05T03:26:56.703211"
+    }
+  ],
+  "interactions": [],
+  "summary": null,
+  "created_at": "2026-01-05T03:26:56.653279",
+  "updated_at": "2026-01-05T03:26:56.703220",
+  "metadata": {}
+}

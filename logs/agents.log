@@ -1,0 +1,154 @@
+2026-01-05 10:28:07,283 - __main__ - INFO - Starting travel_assistant on port 9101...
+2026-01-05 10:28:07,286 - __main__ - INFO - Starting charging_manager on port 9002...
+2026-01-05 10:28:07,289 - __main__ - INFO - Starting billing_advisor on port 9003...
+2026-01-05 10:28:07,291 - __main__ - INFO - Starting emergency_support on port 9004...
+2026-01-05 10:28:07,294 - __main__ - INFO - Starting data_analyst on port 9005...
+2026-01-05 10:28:07,297 - __main__ - INFO - Starting maintenance_expert on port 9006...
+2026-01-05 10:28:07,300 - __main__ - INFO - Starting energy_advisor on port 9007...
+2026-01-05 10:28:07,302 - __main__ - INFO - Starting scheduling_advisor on port 9008...
+2026-01-05 10:28:07,306 - __main__ - INFO - All 8 agents started!
+2026-01-05 10:28:07,306 - __main__ - INFO - Press Ctrl+C to stop all agents.
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Scheduling Advisor Agent on 0.0.0.0:9008
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Emergency Support Agent on 0.0.0.0:9004
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Data Analyst Agent on 0.0.0.0:9005
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Charging Manager Agent on 0.0.0.0:9002
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Billing Advisor Agent on 0.0.0.0:9003
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Travel Assistant Agent on 0.0.0.0:9101
+2026-01-05 10:28:08,708 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Energy Advisor Agent on 0.0.0.0:9007
+2026-01-05 10:28:08,708 - __main__ - INFO - Starting Maintenance Expert Agent on 0.0.0.0:9006
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,709 - common.config - INFO - Nacos Config: server=localhost:8848, namespace=public, group=DEFAULT_GROUP, cluster=DEFAULT
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - user server address  localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,717 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,717 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [client-init] endpoint:None, tenant:public
+2026-01-05 10:28:08,718 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9002, service_name:charging-manager-agent, namespace:public
+2026-01-05 10:28:08,718 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,718 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,718 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,718 - common.nacos_registry - INFO - Nacos client connected to localhost:8848
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9008, service_name:scheduling-advisor-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9003, service_name:billing-advisor-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9005, service_name:data-analyst-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9007, service_name:energy-advisor-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9101, service_name:travel-assistant-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9006, service_name:maintenance-expert-agent, namespace:public
+2026-01-05 10:28:08,718 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9004, service_name:emergency-support-agent, namespace:public
+2026-01-05 10:28:08,743 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9101, service_name:travel-assistant-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,743 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9007, service_name:energy-advisor-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,744 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9004, service_name:emergency-support-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,744 - common.nacos_registry - INFO - Registered service with Nacos: travel-assistant-agent (192.168.77.124:9101)
+2026-01-05 10:28:08,744 - common.nacos_registry - INFO - Registered service with Nacos: energy-advisor-agent (192.168.77.124:9007)
+2026-01-05 10:28:08,744 - __main__ - INFO - Registered with Nacos: travel-assistant-agent-192.168.77.124:9101
+2026-01-05 10:28:08,744 - __main__ - INFO - Registered with Nacos: energy-advisor-agent-192.168.77.124:9007
+2026-01-05 10:28:08,744 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,745 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,745 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,745 - common.nacos_registry - INFO - Registered service with Nacos: emergency-support-agent (192.168.77.124:9004)
+2026-01-05 10:28:08,745 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9008, service_name:scheduling-advisor-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,745 - __main__ - INFO - Registered with Nacos: emergency-support-agent-192.168.77.124:9004
+2026-01-05 10:28:08,745 - __main__ - INFO - Travel Assistant Agent created on port 9101
+2026-01-05 10:28:08,745 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9002, service_name:charging-manager-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,745 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,745 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,745 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,745 - __main__ - INFO - Energy Advisor Agent created on port 9007
+2026-01-05 10:28:08,745 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9003, service_name:billing-advisor-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,745 - __main__ - INFO - Emergency Support Agent created on port 9004
+2026-01-05 10:28:08,746 - common.nacos_registry - INFO - Registered service with Nacos: scheduling-advisor-agent (192.168.77.124:9008)
+2026-01-05 10:28:08,746 - common.nacos_registry - INFO - Registered service with Nacos: charging-manager-agent (192.168.77.124:9002)
+2026-01-05 10:28:08,746 - __main__ - INFO - Registered with Nacos: scheduling-advisor-agent-192.168.77.124:9008
+2026-01-05 10:28:08,746 - __main__ - INFO - Registered with Nacos: charging-manager-agent-192.168.77.124:9002
+2026-01-05 10:28:08,746 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,746 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9005, service_name:data-analyst-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,746 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,746 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,746 - __main__ - INFO - Scheduling Advisor Agent created on port 9008
+2026-01-05 10:28:08,746 - common.nacos_registry - INFO - Registered service with Nacos: billing-advisor-agent (192.168.77.124:9003)
+2026-01-05 10:28:08,746 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,746 - __main__ - INFO - Registered with Nacos: billing-advisor-agent-192.168.77.124:9003
+2026-01-05 10:28:08,747 - common.nacos_registry - INFO - Registered service with Nacos: data-analyst-agent (192.168.77.124:9005)
+2026-01-05 10:28:08,747 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,747 - __main__ - INFO - Registered with Nacos: data-analyst-agent-192.168.77.124:9005
+2026-01-05 10:28:08,747 - __main__ - INFO - Charging Manager Agent created on port 9002
+2026-01-05 10:28:08,747 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,747 - nacos.client - INFO - [add-naming-instance] ip:192.168.77.124, port:9006, service_name:maintenance-expert-agent, namespace:public, server response:b'ok'
+2026-01-05 10:28:08,747 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,747 - __main__ - INFO - Billing Advisor Agent created on port 9003
+2026-01-05 10:28:08,747 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,748 - __main__ - INFO - Data Analyst Agent created on port 9005
+2026-01-05 10:28:08,748 - common.nacos_registry - INFO - Registered service with Nacos: maintenance-expert-agent (192.168.77.124:9006)
+2026-01-05 10:28:08,748 - __main__ - INFO - Registered with Nacos: maintenance-expert-agent-192.168.77.124:9006
+2026-01-05 10:28:08,748 - common.config - INFO - LLM Config: provider=dashscope, model=qwen-plus, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, api_key=***
+2026-01-05 10:28:08,749 - common.llm_client - INFO - LLM Client initialized: provider=dashscope, model=qwen-plus, timeout=120.0s
+2026-01-05 10:28:08,749 - __main__ - INFO - Maintenance Expert Agent created on port 9006
+INFO:     Started server process [14795]
+INFO:     Started server process [14796]
+INFO:     Started server process [14802]
+INFO:     Started server process [14800]
+INFO:     Waiting for application startup.
+INFO:     Waiting for application startup.
+INFO:     Started server process [14798]
+INFO:     Waiting for application startup.
+INFO:     Started server process [14799]
+INFO:     Started server process [14797]
+INFO:     Waiting for application startup.
+INFO:     Started server process [14801]
+INFO:     Waiting for application startup.
+INFO:     Waiting for application startup.
+INFO:     Waiting for application startup.
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9101 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9002 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9006 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9003 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9005 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9004 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9008 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:9007 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59507 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59508 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59509 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59510 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59511 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59512 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59513 - "GET /health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59514 - "GET /health HTTP/1.1" 404 Not Found
+2026-01-05 10:37:48,644 - a2a.server.apps.jsonrpc.jsonrpc_app - WARNING - Deprecated agent card endpoint '/.well-known/agent.json' accessed. Please use '/.well-known/agent-card.json' instead. This endpoint will be removed in a future version.
+INFO:     127.0.0.1:59635 - "GET /.well-known/agent.json HTTP/1.1" 200 OK
+2026-01-05 10:37:48,664 - a2a.server.apps.jsonrpc.jsonrpc_app - WARNING - Deprecated agent card endpoint '/.well-known/agent.json' accessed. Please use '/.well-known/agent-card.json' instead. This endpoint will be removed in a future version.
+INFO:     127.0.0.1:59636 - "GET /.well-known/agent.json HTTP/1.1" 200 OK
+2026-01-05 10:43:47,483 - a2a.server.apps.jsonrpc.jsonrpc_app - WARNING - Request Error (ID: 1): Code=-32601, Message='Method not found'
+INFO:     127.0.0.1:61243 - "POST / HTTP/1.1" 200 OK
+2026-01-05 10:44:02,997 - a2a.server.apps.jsonrpc.jsonrpc_app - WARNING - Request Error (ID: 1): Code=-32601, Message='Method not found'
+INFO:     127.0.0.1:61305 - "POST / HTTP/1.1" 200 OK

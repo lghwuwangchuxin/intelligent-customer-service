@@ -1,0 +1,202 @@
+# Infrastructure Docker Compose
+# =============================
+# Middleware and infrastructure services for the intelligent customer service platform
+#
+# Data directory: /Users/liuguanghu/infra
+#
+# Usage:
+#   Start infrastructure: docker-compose -f docker-compose.infra.yml up -d
+#   View logs: docker-compose -f docker-compose.infra.yml logs -f
+#   Stop all: docker-compose -f docker-compose.infra.yml down
+#   Stop and remove data: docker-compose -f docker-compose.infra.yml down && rm -rf /Users/liuguanghu/infra
+
+version: '3.8'
+
+services:
+  # ===================
+  # Service Discovery
+  # ===================
+
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: nacos
+    ports:
+      - "8848:8848"    # HTTP API
+      - "9848:9848"    # gRPC
+      - "9849:9849"    # gRPC (Raft)
+    environment:
+      - MODE=standalone
+      - PREFER_HOST_MODE=hostname
+      - NACOS_AUTH_ENABLE=false
+      - JVM_XMS=256m
+      - JVM_XMX=256m
+    volumes:
+      - /Users/liuguanghu/infra/nacos/data:/home/nacos/data
+      - /Users/liuguanghu/infra/nacos/logs:/home/nacos/logs
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ===================
+  # Cache & Message Queue
+  # ===================
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - /Users/liuguanghu/infra/redis/data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ===================
+  # Search Engine
+  # ===================
+
+  elasticsearch:
+    image: elasticsearch:8.5.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=ics-cluster
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"    # HTTP API
+      - "9300:9300"    # Transport
+    volumes:
+      - /Users/liuguanghu/infra/elasticsearch/data:/usr/share/elasticsearch/data
+      - /Users/liuguanghu/infra/elasticsearch/logs:/usr/share/elasticsearch/logs
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ===================
+  # Vector Database
+  # ===================
+
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    container_name: milvus
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      - ETCD_USE_EMBED=true
+      - ETCD_DATA_DIR=/var/lib/milvus/etcd
+      - COMMON_STORAGETYPE=local
+    volumes:
+      - /Users/liuguanghu/infra/milvus/data:/var/lib/milvus
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+  # ===================
+  # Database
+  # ===================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=ics
+      - POSTGRES_PASSWORD=ics_password
+      - POSTGRES_DB=ics_db
+    volumes:
+      - /Users/liuguanghu/infra/postgres/data:/var/lib/postgresql/data
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ===================
+  # Monitoring
+  # ===================
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - /Users/liuguanghu/infra/prometheus/config:/etc/prometheus
+      - /Users/liuguanghu/infra/prometheus/data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - infra-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - /Users/liuguanghu/infra/grafana/data:/var/lib/grafana
+      - /Users/liuguanghu/infra/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - infra-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  infra-network:
+    driver: bridge
+    name: ics-infra-network

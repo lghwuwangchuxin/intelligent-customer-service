@@ -1,0 +1,7 @@
+{"timestamp": "2026-01-05T02:27:50.195396Z", "level": "INFO", "logger": "monitoring-service", "message": "Logging initialized for monitoring-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:27:50.195500Z", "level": "INFO", "logger": "monitoring-service", "message": "Starting monitoring-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:27:50.195560Z", "level": "INFO", "logger": "monitoring-service", "message": "Configuration: host=0.0.0.0, port=8004", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:27:50.195615Z", "level": "INFO", "logger": "monitoring-service", "message": "Langfuse enabled: True", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:27:50.205701Z", "level": "INFO", "logger": "monitoring-service", "message": "monitoring-service starting on http://0.0.0.0:8004", "module": "run", "function": "main", "line": 62}
+{"timestamp": "2026-01-05T02:27:50.261611Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:27:50.261709Z", "level": "INFO", "logger": "services.monitoring_service.server", "message": "Monitoring Service started", "module": "server", "function": "_on_startup", "line": 109}

@@ -1,0 +1,26 @@
+# LLM Manager Service Dependencies
+
+# HTTP Framework
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# HTTP Client
+httpx>=0.25.0
+
+# Data Validation
+pydantic>=2.5.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Async Support
+anyio>=4.0.0
+
+# Redis (optional caching)
+redis>=5.0.0
+
+# Langfuse (optional observability)
+langfuse>=2.0.0
+
+# Common dependencies (from services/common)
+# nacos-sdk-python>=0.1.15

@@ -1,0 +1,7 @@
+{"timestamp": "2026-01-05T02:27:51.768161Z", "level": "INFO", "logger": "evaluation-service", "message": "Logging initialized for evaluation-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:27:51.768275Z", "level": "INFO", "logger": "evaluation-service", "message": "Starting evaluation-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:27:51.768339Z", "level": "INFO", "logger": "evaluation-service", "message": "Configuration: host=0.0.0.0, port=8003", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:27:51.768443Z", "level": "INFO", "logger": "evaluation-service", "message": "Redis: redis://localhost:6379/0", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:27:51.794666Z", "level": "INFO", "logger": "evaluation-service", "message": "evaluation-service starting on http://0.0.0.0:8003", "module": "run", "function": "main", "line": 62}
+{"timestamp": "2026-01-05T02:27:51.852659Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:27:51.852750Z", "level": "INFO", "logger": "services.evaluation_service.server", "message": "Evaluation Service started", "module": "server", "function": "_on_startup", "line": 114}

@@ -1,0 +1,14 @@
+{"timestamp": "2026-01-05T02:27:33.210559Z", "level": "INFO", "logger": "multi-agent-service", "message": "Logging initialized for multi-agent-service", "module": "logging", "function": "setup_logging", "line": 126}
+{"timestamp": "2026-01-05T02:27:33.210924Z", "level": "INFO", "logger": "multi-agent-service", "message": "Starting multi-agent-service...", "module": "run", "function": "main", "line": 52}
+{"timestamp": "2026-01-05T02:27:33.211009Z", "level": "INFO", "logger": "multi-agent-service", "message": "Configuration: host=0.0.0.0, port=8006", "module": "run", "function": "main", "line": 53}
+{"timestamp": "2026-01-05T02:27:33.211078Z", "level": "INFO", "logger": "multi-agent-service", "message": "LLM: ollama - qwen3:latest", "module": "run", "function": "main", "line": 54}
+{"timestamp": "2026-01-05T02:27:33.222529Z", "level": "INFO", "logger": "multi-agent-service", "message": "multi-agent-service starting on http://0.0.0.0:8006", "module": "run", "function": "main", "line": 62}
+INFO:     Started server process [14452]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-01-05T02:27:33.280472Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
+{"timestamp": "2026-01-05T02:27:33.280633Z", "level": "INFO", "logger": "services.multi_agent_service.server", "message": "Multi-Agent Service started", "module": "server", "function": "_on_startup", "line": 108}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8006 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57706 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59462 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61090 - "GET /api/agents HTTP/1.1" 200 OK

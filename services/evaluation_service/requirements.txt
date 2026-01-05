@@ -1,0 +1,25 @@
+# Evaluation Service dependencies
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.0.0
+httpx>=0.24.0
+
+# Service discovery
+nacos-sdk-python>=0.1.14
+
+# Configuration
+python-dotenv>=1.0.0
+
+# RAGAS evaluation
+ragas>=0.1.0
+datasets>=2.14.0
+
+# Embedding
+sentence-transformers>=2.2.0
+
+# Redis for task persistence
+redis>=5.0.0
+
+# LangChain (for RAGAS)
+langchain>=0.1.0
+langchain-core>=0.1.0

@@ -1,0 +1,218 @@
+# Microservices Docker Compose
+# ============================
+# Core microservices for the intelligent customer service platform
+#
+# Prerequisites:
+#   Start infrastructure first: docker-compose -f docker-compose.infra.yml up -d
+#
+# Usage:
+#   Start all services: docker-compose -f docker-compose.services.yml up -d
+#   Start with build: docker-compose -f docker-compose.services.yml up -d --build
+#   View logs: docker-compose -f docker-compose.services.yml logs -f
+#   Stop all: docker-compose -f docker-compose.services.yml down
+
+version: '3.8'
+
+# Common environment variables
+x-common-env: &common-env
+  # Nacos Configuration
+  NACOS_SERVER_ADDRESSES: ${NACOS_SERVER_ADDRESSES:-nacos:8848}
+  NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+  NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
+  NACOS_USERNAME: ${NACOS_USERNAME:-}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+  NACOS_ENABLED: "true"
+  # Logging
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_TO_CONSOLE: "true"
+  LOG_TO_FILE: "true"
+  LOG_DIR: /app/logs
+  # Python
+  PYTHONUNBUFFERED: "1"
+  PYTHONPATH: /app
+
+# Common service configuration
+x-service-common: &service-common
+  restart: unless-stopped
+  networks:
+    - ics-network
+
+services:
+  # ===================
+  # API Gateway
+  # ===================
+
+  api-gateway:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: api-gateway
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - mcp-service
+      - rag-service
+      - single-agent-service
+
+  # ===================
+  # Core Services
+  # ===================
+
+  mcp-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/mcp_service/Dockerfile
+    container_name: mcp-service
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: mcp-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  rag-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/rag_service/Dockerfile
+    container_name: rag-service
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: rag-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8002"
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  evaluation-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/evaluation_service/Dockerfile
+    container_name: evaluation-service
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: evaluation-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8003"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  monitoring-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/monitoring_service/Dockerfile
+    container_name: monitoring-service
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: monitoring-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8004"
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ===================
+  # Agent Services
+  # ===================
+
+  single-agent-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/single_agent_service/Dockerfile
+    container_name: single-agent-service
+    ports:
+      - "8005:8005"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: single-agent-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8005"
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - mcp-service
+      - rag-service
+
+  multi-agent-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/multi_agent_service/Dockerfile
+    container_name: multi-agent-service
+    ports:
+      - "8006:8006"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: multi-agent-service
+      SERVICE_HOST: "0.0.0.0"
+      HTTP_PORT: "8006"
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  ics-network:
+    external: true
+    name: ics-infra-network
