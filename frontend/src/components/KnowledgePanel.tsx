@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { Upload, FileText, Trash2, Search, X, Check, AlertCircle } from 'lucide-react';
-import { knowledgeApi, KnowledgeAddRequest } from '../services/api';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Upload, FileText, Search, X, Check, AlertCircle, Database, RefreshCw, BarChart3 } from 'lucide-react';
+import { ragApi, RAGStats, DocumentInfo } from '../services/api';
 
 interface KnowledgePanelProps {
   isOpen: boolean;
@@ -8,27 +8,46 @@ interface KnowledgePanelProps {
 }
 
 const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'upload' | 'text' | 'search'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'text' | 'search' | 'stats'>('upload');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [textContent, setTextContent] = useState('');
   const [textTitle, setTextTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ content: string; source: string }>>([]);
+  const [searchResults, setSearchResults] = useState<DocumentInfo[]>([]);
+  const [stats, setStats] = useState<RAGStats | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await ragApi.getStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Failed to load RAG stats:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'stats') {
+      loadStats();
+    }
+  }, [isOpen, activeTab, loadStats]);
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
     setMessage(null);
     try {
-      const result = await knowledgeApi.uploadDocument(file);
+      const result = await ragApi.uploadFile(file);
       if (result.success) {
-        setMessage({ type: 'success', text: `成功上传 ${file.name}，已索引 ${result.num_documents} 个文档片段` });
+        setMessage({ type: 'success', text: `成功上传 ${file.name}，已创建 ${result.chunks_created || 0} 个文档片段` });
+        loadStats();
       } else {
-        setMessage({ type: 'error', text: result.message });
+        setMessage({ type: 'error', text: result.error || '上传失败' });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '上传失败，请重试' });
+      console.error('Upload error:', error);
+      setMessage({ type: 'error', text: '上传失败，请检查服务是否正常运行' });
     } finally {
       setUploading(false);
     }
@@ -40,20 +59,21 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
     setUploading(true);
     setMessage(null);
     try {
-      const request: KnowledgeAddRequest = {
-        text: textContent,
-        title: textTitle || undefined,
-      };
-      const result = await knowledgeApi.addText(request);
+      const result = await ragApi.indexDocument({
+        content: textContent,
+        source: textTitle || undefined,
+      });
       if (result.success) {
-        setMessage({ type: 'success', text: `成功添加文本，已索引 ${result.num_documents} 个文档片段` });
+        setMessage({ type: 'success', text: `成功添加文本，已创建 ${result.chunks_created || 0} 个文档片段` });
         setTextContent('');
         setTextTitle('');
+        loadStats();
       } else {
-        setMessage({ type: 'error', text: result.message });
+        setMessage({ type: 'error', text: result.error || '添加失败' });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '添加失败，请重试' });
+      console.error('Add text error:', error);
+      setMessage({ type: 'error', text: '添加失败，请检查服务是否正常运行' });
     } finally {
       setUploading(false);
     }
@@ -62,23 +82,25 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
+    setIsSearching(true);
+    setMessage(null);
     try {
-      const results = await knowledgeApi.search(searchQuery, 5);
-      setSearchResults(results);
+      const response = await ragApi.retrieve({
+        query: searchQuery,
+        top_k: 5,
+        config: {
+          enable_rerank: true,
+        },
+      });
+      setSearchResults(response.documents);
+      if (response.documents.length === 0) {
+        setMessage({ type: 'error', text: '未找到相关结果' });
+      }
     } catch (error) {
-      setMessage({ type: 'error', text: '搜索失败' });
-    }
-  };
-
-  const handleClear = async () => {
-    if (!confirm('确定要清空知识库吗？此操作不可恢复。')) return;
-
-    try {
-      await knowledgeApi.clear();
-      setMessage({ type: 'success', text: '知识库已清空' });
-      setSearchResults([]);
-    } catch (error) {
-      setMessage({ type: 'error', text: '清空失败' });
+      console.error('Search error:', error);
+      setMessage({ type: 'error', text: '搜索失败，请检查服务是否正常运行' });
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -133,6 +155,17 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
             <Search className="w-4 h-4 inline mr-2" />
             搜索测试
           </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`flex-1 py-3 text-sm font-medium ${
+              activeTab === 'stats'
+                ? 'text-primary-600 border-b-2 border-primary-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 inline mr-2" />
+            统计
+          </button>
         </div>
 
         {/* Content */}
@@ -180,14 +213,15 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
                 </p>
               </div>
 
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={handleClear}
-                  className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  清空知识库
-                </button>
+              <div className="mt-6 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">支持格式:</p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-0.5 bg-white rounded text-xs text-gray-500">PDF</span>
+                  <span className="px-2 py-0.5 bg-white rounded text-xs text-gray-500">Word (DOCX)</span>
+                  <span className="px-2 py-0.5 bg-white rounded text-xs text-gray-500">Excel (XLSX)</span>
+                  <span className="px-2 py-0.5 bg-white rounded text-xs text-gray-500">TXT</span>
+                  <span className="px-2 py-0.5 bg-white rounded text-xs text-gray-500">Markdown</span>
+                </div>
               </div>
             </div>
           )}
@@ -243,9 +277,14 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
                 />
                 <button
                   onClick={handleSearch}
-                  className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                  disabled={isSearching}
+                  className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  搜索
+                  {isSearching ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    '搜索'
+                  )}
                 </button>
               </div>
 
@@ -256,12 +295,59 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({ isOpen, onClose }) => {
                       key={index}
                       className="p-3 bg-gray-50 rounded-lg border border-gray-200"
                     >
-                      <div className="text-xs text-gray-500 mb-1">
-                        来源: {result.source}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-gray-500">
+                          来源: {result.source || result.metadata?.source || '未知'}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">
+                          相关度: {(result.score * 100).toFixed(0)}%
+                        </span>
                       </div>
-                      <div className="text-sm text-gray-700">{result.content}</div>
+                      <div className="text-sm text-gray-700 line-clamp-3">{result.content}</div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stats Tab */}
+          {activeTab === 'stats' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-primary-500" />
+                  知识库统计
+                </h3>
+                <button
+                  onClick={loadStats}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+
+              {stats ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <p className="text-2xl font-bold text-blue-600">{stats.total_documents}</p>
+                    <p className="text-sm text-gray-600">文档总数</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-600">{stats.total_chunks}</p>
+                    <p className="text-sm text-gray-600">文档片段</p>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded-lg col-span-2">
+                    <p className="text-2xl font-bold text-purple-600">
+                      {stats.index_size_bytes ? (stats.index_size_bytes / 1024 / 1024).toFixed(2) : 0} MB
+                    </p>
+                    <p className="text-sm text-gray-600">索引大小</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin" />
+                  <p>加载统计数据...</p>
                 </div>
               )}
             </div>

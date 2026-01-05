@@ -1,0 +1,13 @@
+# A2A Multi-Agent System Dependencies
+
+# A2A SDK
+a2a-sdk[http-server]>=0.3.0
+
+# Web server
+uvicorn>=0.24.0
+
+# HTTP client
+httpx>=0.24.0
+
+# OpenAI compatible client (for LLM)
+openai>=1.0.0

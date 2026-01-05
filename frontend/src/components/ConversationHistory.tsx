@@ -36,8 +36,12 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await conversationApi.list({ limit: 50, descending: true });
-      setConversations(response.conversations);
+      const response = await conversationApi.list({ limit: 50 });
+      // Sort by updated_at in descending order
+      const sorted = response.conversations.sort((a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+      setConversations(sorted);
     } catch (err) {
       setError('加载对话历史失败');
       console.error('Failed to load conversations:', err);

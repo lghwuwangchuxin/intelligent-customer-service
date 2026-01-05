@@ -12,13 +12,16 @@ import {
   ChevronRight,
   Database,
   Settings,
+  MessageSquare,
+  Clock,
 } from 'lucide-react';
 import {
+  memoryApi,
   memoryStoreApi,
-  UserPreference,
   MemoryEntity,
   MemoryKnowledge,
   MemoryStats,
+  ConversationInfo,
 } from '../services/api';
 
 interface MemoryPanelProps {
@@ -26,18 +29,25 @@ interface MemoryPanelProps {
   onUserIdChange?: (userId: string) => void;
 }
 
-type TabType = 'preferences' | 'entities' | 'knowledge' | 'stats';
+interface PreferenceItem {
+  key: string;
+  value: unknown;
+  category?: string;
+}
+
+type TabType = 'conversations' | 'preferences' | 'entities' | 'knowledge' | 'stats';
 
 export const MemoryPanel: React.FC<MemoryPanelProps> = ({
   userId,
   onUserIdChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('preferences');
+  const [activeTab, setActiveTab] = useState<TabType>('conversations');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Data states
-  const [preferences, setPreferences] = useState<UserPreference[]>([]);
+  const [conversations, setConversations] = useState<ConversationInfo[]>([]);
+  const [preferences, setPreferences] = useState<PreferenceItem[]>([]);
   const [entities, setEntities] = useState<MemoryEntity[]>([]);
   const [knowledge, setKnowledge] = useState<MemoryKnowledge[]>([]);
   const [stats, setStats] = useState<MemoryStats | null>(null);
@@ -64,13 +74,34 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
     });
   };
 
+  const loadConversations = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await memoryApi.listConversations(1, 50);
+      setConversations(response.conversations || []);
+    } catch (err) {
+      setError('加载对话列表失败');
+      console.error('Failed to load conversations:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const loadPreferences = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
     setError(null);
     try {
       const response = await memoryStoreApi.getUserPreferences(userId);
-      setPreferences(response.preferences || []);
+      // Convert Record<string, unknown> to array of PreferenceItem
+      const prefsObj = response.preferences || {};
+      const prefsArray: PreferenceItem[] = Object.entries(prefsObj).map(([key, value]) => ({
+        key,
+        value,
+        category: 'general',
+      }));
+      setPreferences(prefsArray);
     } catch (err) {
       setError('加载用户偏好失败');
       console.error('Failed to load preferences:', err);
@@ -92,12 +123,14 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'preferences' && userId) {
+    if (activeTab === 'conversations') {
+      loadConversations();
+    } else if (activeTab === 'preferences' && userId) {
       loadPreferences();
     } else if (activeTab === 'stats') {
       loadStats();
     }
-  }, [activeTab, userId, loadPreferences, loadStats]);
+  }, [activeTab, userId, loadConversations, loadPreferences, loadStats]);
 
   const handleAddPreference = async () => {
     if (!userId || !newPrefKey.trim()) return;
@@ -147,14 +180,28 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
     }
   };
 
-  const handleClearUserMemory = async () => {
-    if (!userId) return;
-    if (!confirm(`确定要清除用户 ${userId} 的所有记忆吗？`)) return;
+  const handleDeleteConversation = async (conversationId: string) => {
+    if (!confirm('确定要删除这个对话吗？')) return;
     setIsLoading(true);
     try {
-      await memoryStoreApi.clearUserMemory(userId);
+      await memoryApi.deleteConversation(conversationId);
+      await loadConversations();
+    } catch (err) {
+      setError('删除对话失败');
+      console.error('Failed to delete conversation:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearUserMemory = async () => {
+    if (!userId) return;
+    if (!confirm(`确定要清除用户 ${userId} 的所有偏好设置吗？`)) return;
+    setIsLoading(true);
+    try {
+      // Clear preferences by setting them to empty
       setPreferences([]);
-      alert('用户记忆已清除');
+      alert('用户偏好已清除');
     } catch (err) {
       setError('清除记忆失败');
       console.error('Failed to clear memory:', err);
@@ -169,7 +216,22 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
     }
   };
 
+  const formatTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+    { id: 'conversations', label: '对话', icon: <MessageSquare size={16} /> },
     { id: 'preferences', label: '偏好', icon: <Settings size={16} /> },
     { id: 'entities', label: '实体', icon: <Tag size={16} /> },
     { id: 'knowledge', label: '知识', icon: <BookOpen size={16} /> },
@@ -230,13 +292,72 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
           </div>
         )}
 
-        {!userId && activeTab !== 'stats' ? (
+        {!userId && activeTab !== 'stats' && activeTab !== 'conversations' ? (
           <div className="text-center py-8 text-gray-500">
             <User size={40} className="mx-auto mb-2 opacity-50" />
             <p>请先设置用户ID</p>
           </div>
         ) : (
           <>
+            {/* Conversations Tab */}
+            {activeTab === 'conversations' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    共 {conversations.length} 个对话
+                  </span>
+                  <button
+                    onClick={loadConversations}
+                    className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                  >
+                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+
+                {conversations.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare size={40} className="mx-auto mb-2 opacity-50" />
+                    <p>暂无对话记录</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border divide-y">
+                    {conversations.map((conv) => (
+                      <div key={conv.conversation_id} className="p-3 hover:bg-gray-50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {conv.title || `对话 ${conv.conversation_id.slice(0, 8)}...`}
+                            </p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <MessageSquare size={12} />
+                                {conv.message_count} 条消息
+                              </span>
+                              {conv.has_summary && (
+                                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded">
+                                  已总结
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                              <Clock size={12} />
+                              {formatTime(conv.updated_at)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteConversation(conv.conversation_id)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Preferences Tab */}
             {activeTab === 'preferences' && (
               <div className="space-y-4">
@@ -447,41 +568,62 @@ export const MemoryPanel: React.FC<MemoryPanelProps> = ({
                   <div className="bg-white rounded-lg border p-4">
                     <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <Database size={16} className="text-purple-500" />
-                      存储统计
+                      记忆统计
                     </h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 bg-purple-50 rounded-lg">
-                        <p className="text-2xl font-bold text-purple-600">{stats.total_items}</p>
-                        <p className="text-sm text-gray-600">总记录数</p>
+                        <p className="text-2xl font-bold text-purple-600">{stats.total_conversations}</p>
+                        <p className="text-sm text-gray-600">对话数</p>
                       </div>
                       <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-2xl font-bold text-blue-600">{stats.namespace_count}</p>
+                        <p className="text-2xl font-bold text-blue-600">{stats.total_messages}</p>
+                        <p className="text-sm text-gray-600">消息数</p>
+                      </div>
+                      <div className="p-3 bg-green-50 rounded-lg">
+                        <p className="text-2xl font-bold text-green-600">{stats.total_memories}</p>
+                        <p className="text-sm text-gray-600">长期记忆</p>
+                      </div>
+                      <div className="p-3 bg-orange-50 rounded-lg">
+                        <p className="text-2xl font-bold text-orange-600">{stats.namespaces?.length || 0}</p>
                         <p className="text-sm text-gray-600">命名空间</p>
                       </div>
                     </div>
-                    <div className="mt-4">
-                      <p className="text-sm text-gray-600 mb-2">存储类型: {stats.store_type}</p>
-                      {stats.namespaces.length > 0 && (
-                        <div>
-                          <p className="text-sm text-gray-600 mb-1">命名空间列表:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {stats.namespaces.slice(0, 10).map((ns, idx) => (
-                              <span
-                                key={idx}
-                                className="text-xs px-2 py-0.5 bg-gray-100 rounded"
-                              >
-                                {ns}
-                              </span>
-                            ))}
-                            {stats.namespaces.length > 10 && (
-                              <span className="text-xs text-gray-400">
-                                +{stats.namespaces.length - 10} 更多
-                              </span>
-                            )}
-                          </div>
+                    {stats.memory_types && Object.keys(stats.memory_types).length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-600 mb-2">记忆类型:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(stats.memory_types).map(([type, count]) => (
+                            <span
+                              key={type}
+                              className="text-xs px-2 py-1 bg-gray-100 rounded flex items-center gap-1"
+                            >
+                              <span className="font-medium">{type}</span>
+                              <span className="text-gray-400">({count})</span>
+                            </span>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                    {stats.namespaces && stats.namespaces.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-600 mb-2">命名空间:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {stats.namespaces.slice(0, 10).map((ns, idx) => (
+                            <span
+                              key={idx}
+                              className="text-xs px-2 py-0.5 bg-gray-100 rounded"
+                            >
+                              {ns}
+                            </span>
+                          ))}
+                          {stats.namespaces.length > 10 && (
+                            <span className="text-xs text-gray-400">
+                              +{stats.namespaces.length - 10} 更多
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">

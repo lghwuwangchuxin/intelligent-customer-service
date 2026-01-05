@@ -1,0 +1,14 @@
+[project]
+name = "energy-advisor-agent"
+version = "1.0.0"
+description = "Energy Advisor Agent - Cost Optimization"
+requires-python = ">=3.10"
+dependencies = [
+    "a2a-sdk[http-server]>=0.3.0",
+    "uvicorn>=0.24.0",
+    "httpx>=0.24.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

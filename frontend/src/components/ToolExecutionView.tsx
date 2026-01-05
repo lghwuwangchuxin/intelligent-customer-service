@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wrench, ChevronDown, ChevronUp, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Wrench, CheckCircle, XCircle, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { AgentToolCall } from '../services/api';
 
 interface ToolExecutionViewProps {
@@ -9,116 +9,95 @@ interface ToolExecutionViewProps {
 const ToolExecutionView: React.FC<ToolExecutionViewProps> = ({ toolCalls }) => {
   const [expandedCalls, setExpandedCalls] = useState<Set<string>>(new Set());
 
+  const toggleExpand = (id: string) => {
+    setExpandedCalls((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
   if (!toolCalls || toolCalls.length === 0) {
     return null;
   }
 
-  const toggleExpand = (id: string) => {
-    const newExpanded = new Set(expandedCalls);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedCalls(newExpanded);
-  };
-
-  const formatDuration = (ms?: number) => {
-    if (!ms) return '';
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
-
-  const formatValue = (value: unknown): string => {
-    if (typeof value === 'string') {
-      if (value.length > 200) {
-        return value.substring(0, 200) + '...';
-      }
-      return value;
-    }
-    try {
-      const str = JSON.stringify(value, null, 2);
-      if (str.length > 500) {
-        return str.substring(0, 500) + '...';
-      }
-      return str;
-    } catch {
-      return String(value);
-    }
-  };
-
   return (
     <div className="mt-3 pt-3 border-t border-gray-200">
-      <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-        <Wrench className="w-4 h-4" />
-        <span className="font-medium">工具调用 ({toolCalls.length})</span>
+      <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+        <Wrench size={12} />
+        工具调用 ({toolCalls.length})
       </div>
-
       <div className="space-y-2">
-        {toolCalls.map((call) => {
-          const isExpanded = expandedCalls.has(call.id);
-          const hasError = !!call.error;
+        {toolCalls.map((call, index) => {
+          const callId = call.id || `tool_${index}`;
+          const isExpanded = expandedCalls.has(callId);
+          const isSuccess = call.status === 'success' || (!call.error && call.result !== undefined);
+          const isError = call.status === 'error' || !!call.error;
 
           return (
             <div
-              key={call.id}
+              key={callId}
               className={`rounded-lg border ${
-                hasError ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
+                isError ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
               }`}
             >
-              {/* Header */}
               <button
-                onClick={() => toggleExpand(call.id)}
-                className="w-full flex items-center justify-between p-2 text-left hover:bg-gray-50 rounded-t-lg"
+                onClick={() => toggleExpand(callId)}
+                className="w-full px-3 py-2 flex items-center justify-between text-left"
               >
                 <div className="flex items-center gap-2">
-                  {hasError ? (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                  {isSuccess ? (
+                    <CheckCircle size={14} className="text-green-500" />
+                  ) : isError ? (
+                    <XCircle size={14} className="text-red-500" />
                   ) : (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <Clock size={14} className="text-yellow-500 animate-spin" />
                   )}
-                  <span className="font-medium text-sm text-gray-800">
-                    {call.name}
-                  </span>
+                  <span className="text-sm font-medium text-gray-900">{call.name}</span>
                   {call.duration_ms && (
-                    <span className="flex items-center gap-1 text-xs text-gray-500">
-                      <Clock className="w-3 h-3" />
-                      {formatDuration(call.duration_ms)}
-                    </span>
+                    <span className="text-xs text-gray-400">{call.duration_ms}ms</span>
                   )}
                 </div>
                 {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                  <ChevronDown size={14} className="text-gray-400" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                  <ChevronRight size={14} className="text-gray-400" />
                 )}
               </button>
 
-              {/* Details */}
               {isExpanded && (
-                <div className="px-3 pb-3 space-y-2 text-sm">
+                <div className="px-3 pb-3 space-y-2">
                   {/* Arguments */}
-                  <div>
-                    <span className="text-xs font-medium text-gray-500">输入参数:</span>
-                    <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
-                      {formatValue(call.args)}
-                    </pre>
-                  </div>
-
-                  {/* Result or Error */}
-                  {call.result !== undefined && (
+                  {call.args && Object.keys(call.args).length > 0 && (
                     <div>
-                      <span className="text-xs font-medium text-gray-500">执行结果:</span>
-                      <pre className="mt-1 p-2 bg-green-50 rounded text-xs overflow-x-auto text-green-800">
-                        {formatValue(call.result)}
+                      <div className="text-xs text-gray-500 mb-1">参数:</div>
+                      <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(call.args, null, 2)}
                       </pre>
                     </div>
                   )}
 
+                  {/* Result */}
+                  {call.result !== undefined && (
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">结果:</div>
+                      <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
+                        {typeof call.result === 'string'
+                          ? call.result
+                          : JSON.stringify(call.result, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Error */}
                   {call.error && (
                     <div>
-                      <span className="text-xs font-medium text-red-500">错误:</span>
-                      <pre className="mt-1 p-2 bg-red-100 rounded text-xs overflow-x-auto text-red-800">
+                      <div className="text-xs text-red-500 mb-1">错误:</div>
+                      <pre className="text-xs bg-red-100 text-red-700 p-2 rounded overflow-x-auto">
                         {call.error}
                       </pre>
                     </div>

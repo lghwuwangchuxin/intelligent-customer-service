@@ -114,7 +114,7 @@ const ModelConfigPanel: React.FC<ModelConfigPanelProps> = ({
       const result = await configApi.testConfig(request);
 
       if (result.success) {
-        setTestResult({ success: true, message: `连接成功！响应: ${result.response}` });
+        setTestResult({ success: true, message: '连接成功！模型配置有效' });
       } else {
         setTestResult({ success: false, message: result.error || '测试失败' });
       }

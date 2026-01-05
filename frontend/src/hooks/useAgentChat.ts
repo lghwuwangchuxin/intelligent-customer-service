@@ -1,288 +1,223 @@
-import { useState, useCallback, useRef } from 'react';
-import {
-  agentApi,
-  chatApi,
-  langgraphApi,
-  ChatMessage as ApiChatMessage,
-  AgentStreamEvent,
-  AgentToolCall
-} from '../services/api';
+import { useState, useCallback } from 'react';
+import { chatApi, agentApi, memoryApi, AgentStreamEvent, ChatRequest } from '../services/api';
 import { Message } from '../components/ChatMessage';
 import { ThinkingStep } from '../components/ThinkingIndicator';
 
-export interface UseAgentChatOptions {
+interface UseAgentChatOptions {
   useRag?: boolean;
   agentMode?: boolean;
   useLangGraph?: boolean;
-  userId?: string;
-  conversationId?: string;
-  onConversationCreated?: (conversationId: string) => void;
 }
 
-export function useAgentChat(options: UseAgentChatOptions = {}) {
+export const useAgentChat = (options: UseAgentChatOptions = {}) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useRag, setUseRag] = useState(options.useRag ?? true);
   const [agentMode, setAgentMode] = useState(options.agentMode ?? false);
   const [useLangGraph, setUseLangGraph] = useState(options.useLangGraph ?? true);
-  const [userId, setUserId] = useState(options.userId ?? '');
-  const [conversationId, setConversationId] = useState(options.conversationId ?? '');
-
-  // Agent-specific state
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState<number>(0);
 
-  // Plan state for LangGraph
-  const [currentPlan, setCurrentPlan] = useState<Array<{ id: number; description: string; status: string }>>([]);
+  const addMessage = useCallback((message: Message) => {
+    setMessages((prev) => [...prev, message]);
+  }, []);
 
-  const onConversationCreatedRef = useRef(options.onConversationCreated);
-  onConversationCreatedRef.current = options.onConversationCreated;
-
-  const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const generateConversationId = () => `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const updateLastMessage = useCallback((content: string) => {
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        ...updated[updated.length - 1],
+        content,
+      };
+      return updated;
+    });
+  }, []);
 
   const sendMessage = useCallback(
     async (content: string, stream: boolean = true) => {
-      if (!content.trim() || isLoading) return;
-
-      setError(null);
-      setThinkingSteps([]);
-      setCurrentStatus('');
-      setCurrentStep(0);
-      setCurrentPlan([]);
-
-      // Generate conversation ID if not exists
-      let currentConvId = conversationId;
-      if (!currentConvId) {
-        currentConvId = generateConversationId();
-        setConversationId(currentConvId);
-        onConversationCreatedRef.current?.(currentConvId);
-      }
+      if (!content.trim()) return;
 
       // Add user message
       const userMessage: Message = {
-        id: generateId(),
+        id: `user_${Date.now()}`,
         role: 'user',
         content,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMessage]);
-      setIsLoading(true);
+      addMessage(userMessage);
 
-      // Build history for context
-      const history: ApiChatMessage[] = messages.slice(-10).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      setIsLoading(true);
+      setError(null);
+      setThinkingSteps([]);
+      setCurrentStatus('');
+      setCurrentStep(0);
 
       try {
-        if (agentMode) {
-          // Agent mode with streaming
-          const assistantId = generateId();
-          let fullContent = '';
-          const toolCalls: AgentToolCall[] = [];
-          let iterations = 0;
+        // Create conversation if needed
+        let currentConvId = conversationId;
+        if (!currentConvId) {
+          const conv = await memoryApi.createConversation();
+          currentConvId = conv.conversation_id;
+          setConversationId(currentConvId);
+        }
 
-          // Add empty assistant message
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: assistantId,
-              role: 'assistant',
-              content: '',
-              timestamp: new Date(),
-              isAgentResponse: true,
-            },
-          ]);
+        // Add user message to memory
+        await memoryApi.addMessage(currentConvId, { role: 'user', content });
 
-          // Choose API based on useLangGraph setting
-          const streamApi = useLangGraph ? langgraphApi : agentApi;
-          const request = {
-            message: content,
-            conversation_id: currentConvId,
-            user_id: userId || undefined,
-            history,
-            stream: true,
+        const request: ChatRequest = {
+          message: content,
+          conversation_id: currentConvId,
+          use_rag: useRag,
+          stream,
+          config: {
+            enable_tools: agentMode,
+            enable_rag: useRag,
+          },
+        };
+
+        if (agentMode && stream) {
+          // Use agent streaming
+          const assistantMessage: Message = {
+            id: `assistant_${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
           };
+          addMessage(assistantMessage);
 
-          for await (const event of streamApi.streamMessage(request)) {
-            handleAgentEvent(event, assistantId, fullContent, toolCalls, iterations, (newContent) => {
-              fullContent = newContent;
-            }, (newIterations) => {
-              iterations = newIterations;
-            }, (newToolCalls) => {
-              toolCalls.push(...newToolCalls);
+          let fullContent = '';
+          for await (const event of agentApi.streamMessage(request)) {
+            handleAgentEvent(event, (text) => {
+              fullContent += text;
+              updateLastMessage(fullContent);
             });
           }
 
-          // Final update with all tool calls
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: fullContent, toolCalls, iterations, isAgentResponse: true }
-                : m
-            )
-          );
-
+          // Save assistant message to memory
+          if (fullContent) {
+            await memoryApi.addMessage(currentConvId, { role: 'assistant', content: fullContent });
+          }
         } else if (stream) {
-          // Normal streaming response
-          const assistantId = generateId();
+          // Use regular chat streaming
+          const assistantMessage: Message = {
+            id: `assistant_${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+          };
+          addMessage(assistantMessage);
+
           let fullContent = '';
+          for await (const chunk of chatApi.streamMessage(request)) {
+            try {
+              const data = JSON.parse(chunk);
+              if (data.content) {
+                fullContent += data.content;
+                updateLastMessage(fullContent);
+              }
+            } catch {
+              // Plain text chunk
+              fullContent += chunk;
+              updateLastMessage(fullContent);
+            }
+          }
 
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: assistantId,
-              role: 'assistant',
-              content: '',
-              timestamp: new Date(),
-            },
-          ]);
-
-          for await (const chunk of chatApi.streamMessage({
-            message: content,
-            conversation_id: currentConvId,
-            history,
-            use_rag: useRag,
-            stream: true,
-          })) {
-            fullContent += chunk;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: fullContent } : m
-              )
-            );
+          // Save assistant message to memory
+          if (fullContent) {
+            await memoryApi.addMessage(currentConvId, { role: 'assistant', content: fullContent });
           }
         } else {
-          // Non-streaming response
-          const response = await chatApi.sendMessage({
-            message: content,
-            conversation_id: currentConvId,
-            history,
-            use_rag: useRag,
-            stream: false,
-          });
-
+          // Non-streaming
+          const response = await chatApi.sendMessage(request);
           const assistantMessage: Message = {
-            id: generateId(),
+            id: `assistant_${Date.now()}`,
             role: 'assistant',
-            content: response.response,
+            content: response.message,
             timestamp: new Date(),
-            sources: response.sources?.map((s) => ({
-              content: s.content,
-              source: s.source,
-            })),
+            sources: response.sources?.map((s) => ({ content: s, source: s })),
+            toolCalls: response.tool_calls,
           };
-          setMessages((prev) => [...prev, assistantMessage]);
+          addMessage(assistantMessage);
+
+          // Save assistant message to memory
+          await memoryApi.addMessage(currentConvId, { role: 'assistant', content: response.message });
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : '发送消息失败';
-        setError(errorMessage);
         console.error('Chat error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to send message');
       } finally {
         setIsLoading(false);
         setCurrentStatus('');
       }
     },
-    [messages, isLoading, useRag, agentMode, useLangGraph, userId, conversationId]
+    [conversationId, useRag, agentMode, addMessage, updateLastMessage]
   );
 
-  const handleAgentEvent = (
-    event: AgentStreamEvent,
-    assistantId: string,
-    currentContent: string,
-    _toolCalls: AgentToolCall[],
-    _iterations: number,
-    setContent: (content: string) => void,
-    setIterations: (iterations: number) => void,
-    _addToolCalls: (calls: AgentToolCall[]) => void
-  ) => {
+  const handleAgentEvent = (event: AgentStreamEvent, onContent: (text: string) => void) => {
     switch (event.type) {
       case 'status':
         setCurrentStatus(event.content || '');
         break;
-
       case 'thought':
-        setCurrentStep(event.step || 0);
-        setThinkingSteps((prev) => [
-          ...prev,
-          {
-            type: 'thinking',
-            content: event.content || '',
-            step: event.step,
-          },
-        ]);
+        if (event.content) {
+          setThinkingSteps((prev) => [
+            ...prev,
+            { type: 'thinking', content: event.content!, step: event.step },
+          ]);
+          if (event.step !== undefined) setCurrentStep(event.step);
+        }
         break;
-
       case 'action':
-        setThinkingSteps((prev) => [
-          ...prev,
-          {
-            type: 'action',
-            content: `调用工具: ${event.tool}`,
-            tool: event.tool,
-            step: event.step,
-          },
-        ]);
+        if (event.tool) {
+          setThinkingSteps((prev) => [
+            ...prev,
+            { type: 'action', content: event.tool!, tool: event.tool, step: event.step },
+          ]);
+        }
         break;
-
       case 'observation':
-        setThinkingSteps((prev) => [
-          ...prev,
-          {
-            type: 'observation',
-            content: event.content || '',
-            step: event.step,
-          },
-        ]);
+        if (event.content) {
+          setThinkingSteps((prev) => [
+            ...prev,
+            { type: 'observation', content: event.content!, step: event.step },
+          ]);
+        }
         break;
-
       case 'response':
-        const newContent = currentContent + (event.content || '');
-        setContent(newContent);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: newContent } : m
-          )
-        );
+      case 'response_start':
+        if (event.content) {
+          onContent(event.content);
+        }
         break;
-
       case 'done':
-        setIterations(event.iterations || 0);
+        setCurrentStatus('完成');
         break;
-
       case 'error':
-        setError(event.content || '未知错误');
+        setError(event.content || 'Unknown error');
         break;
     }
   };
 
   const clearMessages = useCallback(() => {
     setMessages([]);
-    setError(null);
     setThinkingSteps([]);
     setCurrentStatus('');
     setCurrentStep(0);
-    setCurrentPlan([]);
+    setError(null);
   }, []);
 
   const startNewConversation = useCallback(() => {
+    setConversationId(undefined);
     clearMessages();
-    const newConvId = generateConversationId();
-    setConversationId(newConvId);
-    onConversationCreatedRef.current?.(newConvId);
-    return newConvId;
   }, [clearMessages]);
 
   const loadConversation = useCallback((convId: string, loadedMessages: Message[]) => {
     setConversationId(convId);
     setMessages(loadedMessages);
-    setThinkingSteps([]);
-    setCurrentStatus('');
-    setCurrentStep(0);
-    setCurrentPlan([]);
   }, []);
 
   return {
@@ -295,20 +230,15 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     setAgentMode,
     useLangGraph,
     setUseLangGraph,
-    userId,
-    setUserId,
     conversationId,
-    setConversationId,
     sendMessage,
     clearMessages,
     startNewConversation,
     loadConversation,
-    // Agent-specific
     thinkingSteps,
     currentStatus,
     currentStep,
-    currentPlan,
   };
-}
+};
 
 export default useAgentChat;
