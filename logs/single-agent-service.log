@@ -42,3 +42,4 @@
 {"timestamp": "2026-01-05T02:58:19.830283Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
 {"timestamp": "2026-01-05T02:58:19.830379Z", "level": "INFO", "logger": "services.single_agent_service.server", "message": "Single Agent Service started", "module": "server", "function": "_on_startup", "line": 110}
 {"timestamp": "2026-01-05T02:58:54.060968Z", "level": "INFO", "logger": "services.single_agent_service.service", "message": "Single Agent Service initialized", "module": "service", "function": "initialize", "line": 197}
+{"timestamp": "2026-01-05T10:32:15.824396Z", "level": "INFO", "logger": "services.single_agent_service.server", "message": "Single Agent Service shutting down", "module": "server", "function": "_on_shutdown", "line": 114}

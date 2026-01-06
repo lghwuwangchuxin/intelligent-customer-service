@@ -5,3 +5,5 @@
 {"timestamp": "2026-01-05T02:27:51.794666Z", "level": "INFO", "logger": "evaluation-service", "message": "evaluation-service starting on http://0.0.0.0:8003", "module": "run", "function": "main", "line": 62}
 {"timestamp": "2026-01-05T02:27:51.852659Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
 {"timestamp": "2026-01-05T02:27:51.852750Z", "level": "INFO", "logger": "services.evaluation_service.server", "message": "Evaluation Service started", "module": "server", "function": "_on_startup", "line": 114}
+{"timestamp": "2026-01-05T10:32:15.823121Z", "level": "INFO", "logger": "services.evaluation_service.service", "message": "Evaluation Service shutdown", "module": "service", "function": "shutdown", "line": 106}
+{"timestamp": "2026-01-05T10:32:15.847518Z", "level": "INFO", "logger": "services.evaluation_service.server", "message": "Evaluation Service shutting down", "module": "server", "function": "_on_shutdown", "line": 119}

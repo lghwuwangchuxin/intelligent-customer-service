@@ -32,3 +32,9 @@ INFO:     127.0.0.1:54806 - "GET /api/users/user123/preferences HTTP/1.1" 500 In
 INFO:     127.0.0.1:54807 - "POST /api/knowledge HTTP/1.1" 200 OK
 WARNING:  Invalid HTTP request received.
 INFO:     127.0.0.1:54809 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.851725Z", "level": "ERROR", "logger": "services.memory_service.service", "message": "Failed to persist memory on shutdown: MemoryManager._persist_memory() missing 1 required positional argument: 'memory'", "module": "service", "function": "shutdown", "line": 192}
+{"timestamp": "2026-01-05T10:32:15.855690Z", "level": "INFO", "logger": "services.memory_service.server", "message": "Memory Service shutting down", "module": "server", "function": "_on_shutdown", "line": 189}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [37033]

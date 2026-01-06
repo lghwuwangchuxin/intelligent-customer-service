@@ -26,3 +26,9 @@ INFO:     127.0.0.1:63694 - "GET /api/system/info HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:63707 - "GET /api/a2a/agents HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:63797 - "GET /api/memory/conversations?page=1&page_size=50 HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:63802 - "POST /api/a2a/chat HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.767838Z", "level": "INFO", "logger": "services.api_gateway.app", "message": "Shutting down API Gateway...", "module": "app", "function": "on_shutdown", "line": 85}
+{"timestamp": "2026-01-05T10:32:15.834405Z", "level": "INFO", "logger": "services.api_gateway.app", "message": "API Gateway stopped", "module": "app", "function": "on_shutdown", "line": 91}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29708]

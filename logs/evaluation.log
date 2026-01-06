@@ -13,3 +13,9 @@ INFO:     127.0.0.1:57708 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59459 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61136 - "GET /openapi.json HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61171 - "GET /api/evaluations HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.808536Z", "level": "INFO", "logger": "services.evaluation_service.service", "message": "Evaluation Service shutdown", "module": "service", "function": "shutdown", "line": 106}
+{"timestamp": "2026-01-05T10:32:15.847350Z", "level": "INFO", "logger": "services.evaluation_service.server", "message": "Evaluation Service shutting down", "module": "server", "function": "_on_shutdown", "line": 119}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14596]

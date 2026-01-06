@@ -56,3 +56,4 @@
 {"timestamp": "2026-01-05T02:27:28.463303Z", "level": "INFO", "logger": "services.llm_manager_service.service", "message": "LLM Manager initialized with ollama:qwen3:latest", "module": "service", "function": "initialize", "line": 152}
 {"timestamp": "2026-01-05T02:27:28.463378Z", "level": "INFO", "logger": "services.llm_manager_service.server", "message": "LLM Manager Service started", "module": "server", "function": "_on_startup", "line": 108}
 {"timestamp": "2026-01-05T02:27:28.463914Z", "level": "INFO", "logger": "services.llm_manager_service.server", "message": "LLM Manager Service shutting down", "module": "server", "function": "_on_shutdown", "line": 112}
+{"timestamp": "2026-01-05T10:32:15.822992Z", "level": "INFO", "logger": "services.llm_manager_service.server", "message": "LLM Manager Service shutting down", "module": "server", "function": "_on_shutdown", "line": 112}

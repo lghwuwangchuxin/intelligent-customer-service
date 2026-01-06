@@ -58,3 +58,4 @@
 {"timestamp": "2026-01-05T02:27:31.988638Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
 {"timestamp": "2026-01-05T02:27:31.988723Z", "level": "INFO", "logger": "services.mcp_service.server", "message": "MCP Service started", "module": "server", "function": "_on_startup", "line": 99}
 {"timestamp": "2026-01-05T02:27:31.989423Z", "level": "INFO", "logger": "services.mcp_service.server", "message": "MCP Service shutting down", "module": "server", "function": "_on_shutdown", "line": 103}
+{"timestamp": "2026-01-05T10:32:15.823013Z", "level": "INFO", "logger": "services.mcp_service.server", "message": "MCP Service shutting down", "module": "server", "function": "_on_shutdown", "line": 103}

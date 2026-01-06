@@ -5,3 +5,5 @@
 {"timestamp": "2026-01-05T02:27:33.222581Z", "level": "INFO", "logger": "multi-agent-service", "message": "multi-agent-service starting on http://0.0.0.0:8006", "module": "run", "function": "main", "line": 62}
 {"timestamp": "2026-01-05T02:27:33.280558Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
 {"timestamp": "2026-01-05T02:27:33.280665Z", "level": "INFO", "logger": "services.multi_agent_service.server", "message": "Multi-Agent Service started", "module": "server", "function": "_on_startup", "line": 108}
+{"timestamp": "2026-01-05T10:32:15.842108Z", "level": "INFO", "logger": "services.multi_agent_service.service", "message": "Multi-Agent Service shutdown", "module": "service", "function": "shutdown", "line": 98}
+{"timestamp": "2026-01-05T10:32:15.843841Z", "level": "INFO", "logger": "services.multi_agent_service.server", "message": "Multi-Agent Service shutting down", "module": "server", "function": "_on_shutdown", "line": 113}

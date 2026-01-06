@@ -12,3 +12,9 @@ INFO:     Uvicorn running on http://0.0.0.0:8006 (Press CTRL+C to quit)
 INFO:     127.0.0.1:57706 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59462 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61090 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.836474Z", "level": "INFO", "logger": "services.multi_agent_service.service", "message": "Multi-Agent Service shutdown", "module": "service", "function": "shutdown", "line": 98}
+{"timestamp": "2026-01-05T10:32:15.842406Z", "level": "INFO", "logger": "services.multi_agent_service.server", "message": "Multi-Agent Service shutting down", "module": "server", "function": "_on_shutdown", "line": 113}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14452]

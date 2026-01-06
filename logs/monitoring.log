@@ -12,3 +12,9 @@ INFO:     Uvicorn running on http://0.0.0.0:8004 (Press CTRL+C to quit)
 INFO:     127.0.0.1:57707 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59460 - "GET /health HTTP/1.1" 200 OK
 INFO:     127.0.0.1:61111 - "GET /api/metrics HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.808023Z", "level": "INFO", "logger": "services.monitoring_service.service", "message": "Monitoring Service shutdown", "module": "service", "function": "shutdown", "line": 87}
+{"timestamp": "2026-01-05T10:32:15.842231Z", "level": "INFO", "logger": "services.monitoring_service.server", "message": "Monitoring Service shutting down", "module": "server", "function": "_on_shutdown", "line": 114}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14560]

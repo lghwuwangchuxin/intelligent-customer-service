@@ -14,3 +14,8 @@ INFO:     127.0.0.1:64777 - "GET /health HTTP/1.1" 200 OK
 {"timestamp": "2026-01-05T02:58:54.060900Z", "level": "INFO", "logger": "services.single_agent_service.service", "message": "Single Agent Service initialized", "module": "service", "function": "initialize", "line": 197}
 INFO:     127.0.0.1:64908 - "POST /api/chat HTTP/1.1" 200 OK
 INFO:     127.0.0.1:49651 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"timestamp": "2026-01-05T10:32:15.810449Z", "level": "INFO", "logger": "services.single_agent_service.server", "message": "Single Agent Service shutting down", "module": "server", "function": "_on_shutdown", "line": 114}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [25834]

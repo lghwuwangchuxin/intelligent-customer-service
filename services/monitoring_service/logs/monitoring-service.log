@@ -5,3 +5,5 @@
 {"timestamp": "2026-01-05T02:27:50.205701Z", "level": "INFO", "logger": "monitoring-service", "message": "monitoring-service starting on http://0.0.0.0:8004", "module": "run", "function": "main", "line": 62}
 {"timestamp": "2026-01-05T02:27:50.261611Z", "level": "INFO", "logger": "services.common.fastapi_nacos", "message": "Nacos registration disabled", "module": "fastapi_nacos", "function": "startup", "line": 115}
 {"timestamp": "2026-01-05T02:27:50.261709Z", "level": "INFO", "logger": "services.monitoring_service.server", "message": "Monitoring Service started", "module": "server", "function": "_on_startup", "line": 109}
+{"timestamp": "2026-01-05T10:32:15.822005Z", "level": "INFO", "logger": "services.monitoring_service.service", "message": "Monitoring Service shutdown", "module": "service", "function": "shutdown", "line": 87}
+{"timestamp": "2026-01-05T10:32:15.843841Z", "level": "INFO", "logger": "services.monitoring_service.server", "message": "Monitoring Service shutting down", "module": "server", "function": "_on_shutdown", "line": 114}
