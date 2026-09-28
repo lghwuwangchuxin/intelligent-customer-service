@@ -30,6 +30,18 @@ def _thread_id(tenant_id: str, conversation_id: str) -> str:
     return f"{tenant_id}:{conversation_id}"
 
 
+async def _index_conversation(c: Any, ctx: Any, conversation_id: str, req: ChatRequest, agent_id: str) -> None:
+    """更新会话索引。索引失败不能影响对话本身。"""
+    try:
+        await c.conversations.touch(
+            ctx, conversation_id=conversation_id, first_message=req.message, agent_id=agent_id
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("会话索引更新失败 conversation=%s: %s", conversation_id, exc)
+
+
 async def _pick_agent(c: Any, ctx: Any, req: ChatRequest) -> Any:
     if req.agent_id:
         return c.agents.get(req.agent_id)
@@ -71,16 +83,7 @@ async def chat(req: ChatRequest, ctx: Ctx, c: Container) -> dict[str, Any]:
         if getattr(msg, "type", None) == "ai" and getattr(msg, "content", None):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
 
-    try:
-        await c.conversations.touch(                # type: ignore[attr-defined]
-            ctx, conversation_id=conversation_id,
-            first_message=req.message, agent_id=cfg.id,
-        )
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        # 索引失败不该让已产出的回复丢掉
-        logger.warning("会话索引更新失败 conversation=%s: %s", conversation_id, exc)
+    await _index_conversation(c, ctx, conversation_id, req, cfg.id)
 
     return {
         "content": content, "agent_id": cfg.id, "conversation_id": conversation_id,
@@ -94,6 +97,13 @@ async def chat_stream(req: ChatRequest, ctx: Ctx, c: Container) -> StreamingResp
     conversation_id = req.conversation_id or str(uuid.uuid4())
     graph = c.engine.build(cfg)                     # type: ignore[attr-defined]
     config = {"configurable": {"thread_id": _thread_id(ctx.tenant_id, conversation_id)}}
+
+    # 🔴 在开流**之前**写索引，而不是流结束后：
+    #    用户中途点「停止」时流是被取消的，放在结束后写会整个跳过，
+    #    结果是从界面发起的会话永远不出现在侧栏（实测：checkpointer 有 6 条
+    #    thread，索引表只有 1 条——那唯一一条还是非流式接口写的）。
+    #    会话在用户按下发送那一刻就已存在，提前写符合语义。
+    await _index_conversation(c, ctx, conversation_id, req, cfg.id)
 
     async def events():
         def emit(payload: dict[str, Any]) -> str:
