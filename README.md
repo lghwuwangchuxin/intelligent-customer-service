@@ -1,1033 +1,270 @@
-# 智能客服系统
+# 智能客服平台
 
-基于微服务架构的企业级智能客服平台，集成 RAG 检索、多智能体协作、LangGraph 推理引擎。
-
-## 目录
-
-- [系统架构](#系统架构)
-  - [整体架构](#整体架构)
-  - [微服务架构](#微服务架构)
-  - [服务调用关系](#服务调用关系)
-- [技术组件](#技术组件)
-  - [核心技术栈](#核心技术栈)
-  - [中间件服务](#中间件服务)
-- [部署文档](#部署文档)
-  - [环境要求](#环境要求)
-  - [快速启动](#快速启动)
-  - [中间件部署](#中间件部署)
-  - [微服务部署](#微服务部署)
-  - [智能体部署](#智能体部署)
-- [业务流程](#业务流程)
-  - [单智能体对话流程](#单智能体对话流程)
-  - [多智能体协作流程](#多智能体协作流程)
-  - [RAG 检索流程](#rag-检索流程)
-- [服务详情](#服务详情)
-- [API 接口](#api-接口)
-- [开发指南](#开发指南)
-- [常见问题](#常见问题)
+企业级 RAG + 智能体客服系统。Python 3.12 / LangChain 1.x / LangGraph 1.x / pgvector / MCP 2026-07-28。
 
 ---
 
-## 系统架构
+## 核心命题
 
-### 整体架构
+**不是「选对框架」，而是：假设依赖的一切都会在 2 年内死亡或不兼容，
+设计一个换掉它们时爆炸半径可预测的结构。**
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Frontend (React + TypeScript)                       │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────────┐ │
-│  │  对话界面   │ │ 知识库管理  │ │  记忆面板   │ │ 多智能体面板│ │ 服务监控   │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └────────────┘ │
-└──────────────────────────────────────┬──────────────────────────────────────────┘
-                                       │ HTTP/WebSocket
-                                       ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                         API Gateway (Port 8000)                                   │
-│  • 统一入口 • 路由转发 • 负载均衡 • 认证鉴权 • 限流熔断                          │
-└──────────────────────────────────────┬───────────────────────────────────────────┘
-                                       │ HTTP (Service Discovery via Nacos)
-         ┌────────────┬────────────┬───┴───┬────────────┬────────────┐
-         ▼            ▼            ▼       ▼            ▼            ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│ MCP Service │ │ RAG Service │ │Memory Svc   │ │Single Agent │ │Multi Agent  │
-│  Port 8001  │ │  Port 8002  │ │  Port 8010  │ │  Port 8005  │ │  Port 8006  │
-└──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-       │               │               │               │               │
-       └───────────────┴───────────────┴───────┬───────┴───────────────┘
-                                               │
-         ┌────────────┬────────────┬───────────┼───────────┬────────────┐
-         ▼            ▼            ▼           ▼           ▼            ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│ Evaluation  │ │ Monitoring  │ │ LLM Manager │ │    Nacos    │ │   Agents    │
-│  Port 8003  │ │  Port 8004  │ │  Port 8007  │ │  Port 8848  │ │ 9001-9008   │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-                                               │
-┌──────────────────────────────────────────────┴───────────────────────────────────┐
-│                              Infrastructure Layer                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │  Redis   │  │  Milvus  │  │   ES     │  │ Postgres │  │Prometheus│            │
-│  │  :6379   │  │  :19530  │  │  :9200   │  │  :5432   │  │  :9090   │            │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘            │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
+依据不是假想——过去 12 个月已实际发生：MCP 协议重构（握手整个移除）、
+LangChain 移除 Agent 体系、LlamaIndex 类墓碑化、AutoGen 分裂停更、
+One API / NebulaGraph / MetaGPT 停更。
 
-### 微服务架构
+变化速率分层，是全部设计的出发点：
 
-系统采用微服务架构，共包含 **9 个核心服务** 和 **8 个专业智能体**：
+| 层 | 半衰期 | 对策 |
+|---|---|---|
+| 实现层（SDK、框架 API） | 3~6 月 | 关进单一边界 |
+| 协议层（MCP、OpenAI 兼容、OTel） | 1~2 年 | 可以深绑 |
+| 原理与数据模型 | 5 年+ | 沉淀在 `core/` |
 
-| 服务层 | 服务名称 | 端口 | 职责描述 |
-|--------|----------|------|----------|
-| **网关层** | API Gateway | 8000 | 统一入口、路由转发、认证鉴权 |
-| **核心服务** | MCP Service | 8001 | MCP 工具管理与执行 |
-| | RAG Service | 8002 | 知识检索与文档处理 |
-| | Evaluation Service | 8003 | RAG 质量评估 (RAGAS) |
-| | Monitoring Service | 8004 | 链路追踪与性能监控 |
-| | Single Agent Service | 8005 | 单智能体对话服务 |
-| | Multi Agent Service | 8006 | 多智能体协调服务 |
-| | LLM Manager Service | 8007 | LLM 模型管理与配置 |
-| | Memory Service | 8010 | 对话记忆与用户偏好 |
-| **专业智能体** | Travel Assistant | 9101 | 出行助手 - 充电站搜索 |
-| | Charging Manager | 9002 | 充电管家 - 充电状态监控 |
-| | Billing Advisor | 9003 | 费用顾问 - 账单查询 |
-| | Emergency Support | 9004 | 故障急救 - 问题诊断 |
-| | Data Analyst | 9005 | 数据分析师 - 能效报告 |
-| | Maintenance Expert | 9006 | 运维专家 - 设备健康 |
-| | Energy Advisor | 9007 | 能源顾问 - 成本优化 |
-| | Scheduling Advisor | 9008 | 调度顾问 - 负荷预测 |
+---
 
-### 服务调用关系
+## 六层单向依赖
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                                用户请求流向                                      │
-└────────────────────────────────────────────────────────────────────────────────┘
+L5  api · worker · mcp_servers      只做协议转换
+L4  agent                           编排与运行态（engine · patterns · schema）
+L3  rag │ tools │ memory │ guard    ← 四者平级，互不 import
+L2  model                           模型访问唯一收敛点（registry · gateway）
+L1  infra                           pg · redis · queue
+L0  core                            types · context · errors · config · telemetry · spi
+```
 
-                              ┌──────────────┐
-                              │   Frontend   │
-                              └──────┬───────┘
-                                     │
-                                     ▼
-                              ┌──────────────┐
-                              │ API Gateway  │◄─────── Nacos (服务发现)
-                              └──────┬───────┘
-                                     │
-           ┌─────────────────────────┼─────────────────────────┐
-           │                         │                         │
-           ▼                         ▼                         ▼
-    ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-    │Single Agent │          │Memory Service│         │Multi Agent  │
-    │   Service   │          │             │          │   Service   │
-    └──────┬──────┘          └──────┬──────┘          └──────┬──────┘
-           │                        │                        │
-           │  ┌─────────────────────┤                        │
-           │  │                     │                        │
-           ▼  ▼                     ▼                        ▼
-    ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-    │ RAG Service │◄─────────│ LLM Manager │─────────►│  A2A Agents │
-    └──────┬──────┘          └─────────────┘          │  (8 agents) │
-           │                                          └──────┬──────┘
-           │  ┌───────────────────────────────────────────────┘
-           ▼  ▼
-    ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-    │ MCP Service │          │ Evaluation  │          │ Monitoring  │
-    │   (Tools)   │          │   Service   │          │   Service   │
-    └─────────────┘          └─────────────┘          └─────────────┘
+🔴 **L3 平级独立是最易被破坏也最值钱的约束**——`rag` 一旦 import `tools`，
+检索就再也无法单独评测。
 
+```
+src/ics/
+├── core/          L0  全局词汇表。不依赖任何层，可被所有层引用
+│   ├── types.py       Content/Part 多模态模型 · Chunk · Usage · LLMResponse
+│   ├── context.py     RequestContext（租户 + 预算，🔴 显式传递，禁用 ContextVar）
+│   ├── errors.py      retryable 是一等公民；响应体只出错误码与本地化文案
+│   ├── config.py      frozen Settings，启动即校验
+│   ├── telemetry.py   OTel GenAI 语义约定 + Prometheus
+│   └── spi.py         Protocol 而非 ABC，框架类型不渗透进核心模型
+├── infra/         L1  pg（池级注册向量类型）· cache（幂等/缓存故障态度相反）· queue（有界）
+├── model/         L2  registry（别名表）· gateway · embedding · rerank
+├── rag/           L3-a ingest/ index/ retrieve/ generate/
+├── tools/         L3-b registry · mcp_client（🔴 全仓库唯一可 import mcp SDK 的模块）
+├── memory/        L3-c conversation（会话索引）· longterm（跨会话）
+├── guard/         L3-d budget · authz（写操作→待确认单）· pii（中文场景规则）
+├── agent/         L4  schema · loader · engine · patterns/（🔴 唯一可 import langchain）
+├── api/           L5  wiring（组装根）· routes/
+├── worker/        L5  recall_probe
+└── mcp_servers/   L5  对外暴露 MCP
 
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                              服务依赖关系                                        │
-└────────────────────────────────────────────────────────────────────────────────┘
-
-  API Gateway
-      │
-      ├──► Single Agent Service ──┬──► MCP Service
-      │                           ├──► RAG Service ──► Milvus + ES
-      │                           ├──► Memory Service ──► Redis
-      │                           └──► LLM Manager ──► Ollama/OpenAI/DeepSeek
-      │
-      ├──► Multi Agent Service ───┬──► A2A Agents (9101-9008)
-      │                           └──► LLM Manager
-      │
-      ├──► RAG Service ───────────┬──► Milvus (向量检索)
-      │                           ├──► Elasticsearch (BM25 检索)
-      │                           └──► LLM Manager (Embedding)
-      │
-      ├──► Memory Service ────────┬──► Redis (短期记忆)
-      │                           └──► PostgreSQL (长期记忆)
-      │
-      ├──► Evaluation Service ────┬──► RAG Service
-      │                           └──► LLM Manager
-      │
-      └──► Monitoring Service ────┬──► Prometheus (指标)
-                                  └──► Langfuse (链路追踪)
+prompts/           提示词是文件，不进代码
+agents/            Agent 是数据，加 Agent = 加一个 yaml
+evals/             与 src/ 平级 —— 它是产品资产，不是测试代码
 ```
 
 ---
 
-## 技术组件
+## 六条设计原则
 
-### 核心技术栈
-
-| 类别 | 技术 | 版本 | 用途 |
-|------|------|------|------|
-| **后端框架** | FastAPI | 0.100+ | 异步 API 服务 |
-| | Pydantic | 2.0+ | 数据验证 |
-| **智能体** | LangGraph | 0.2+ | 多步推理与状态管理 |
-| | LangChain | 0.3+ | LLM 抽象与工具链 |
-| **RAG 引擎** | LlamaIndex | 0.11+ | 检索增强生成 |
-| **向量数据库** | Milvus | 2.3+ | 向量存储与检索 |
-| **搜索引擎** | Elasticsearch | 8.5+ | BM25 检索与全文搜索 |
-| **缓存** | Redis | 7+ | 会话缓存与 Embedding 缓存 |
-| **数据库** | PostgreSQL | 15+ | 持久化存储 |
-| **服务发现** | Nacos | 2.3+ | 服务注册与配置中心 |
-| **监控** | Prometheus + Grafana | - | 指标采集与可视化 |
-| | Langfuse | - | LLM 链路追踪 |
-| **前端** | React + TypeScript | 18+ | 用户界面 |
-| | Vite | 5+ | 构建工具 |
-| | TailwindCSS | 3+ | 样式框架 |
-
-### 中间件服务
-
-| 中间件 | 端口 | 用途 | 数据目录 |
-|--------|------|------|----------|
-| **Nacos** | 8848, 9848, 9849 | 服务发现与配置中心 | `/infra/nacos` |
-| **Redis** | 6379 | 缓存、会话存储 | `/infra/redis` |
-| **Milvus** | 19530, 9091 | 向量数据库 | `/infra/milvus` |
-| **Elasticsearch** | 9200, 9300 | 全文检索 | `/infra/elasticsearch` |
-| **PostgreSQL** | 5432 | 关系型数据库 | `/infra/postgres` |
-| **Prometheus** | 9090 | 指标采集 | `/infra/prometheus` |
-| **Grafana** | 3000 | 监控可视化 | `/infra/grafana` |
+| | 原则 | 判据 |
+|---|---|---|
+| P1 | **Agent 是数据不是代码** | 代码里不存在任何具体 Agent；新增 = 插一行配置 |
+| P2 | **上下文显式传递，fail-closed** | 🔴 禁用 ContextVar（异步/线程池边界静默丢失 → 跨租户泄漏） |
+| P3 | **易变实现关在单一边界** | MCP 只在 `tools/mcp_client.py`；模型只在 `model/`；编排框架只在 `agent/` |
+| P4 | **能力层平级独立** | 保住可单独评测 |
+| P5 | **写操作只产出待确认操作单** | 无绕过路径 |
+| P6 | **先收敛调用点，后抽象接口** | 🔴 一个 SPI 只有一个实现 = 净损失 |
 
 ---
 
-## 部署文档
+## 扩展点矩阵
 
-### 环境要求
+「可扩展」必须可度量。下面每一行的答案都必须是**改配置或起进程，不发版**：
 
-| 软件 | 版本 | 必需 | 说明 |
-|------|------|------|------|
-| Python | 3.12+ | 是 | 推荐 3.12，3.13 部分依赖不兼容 |
-| Node.js | 18+ | 是 | 前端开发 |
-| Docker | 24+ | 是 | 容器化部署 |
-| Docker Compose | 2.0+ | 是 | 服务编排 |
-| uv | 最新版 | 推荐 | Python 包管理器 |
+| 要加什么 | 怎么做 | 需要发版？ |
+|---|---|---|
+| 加一个模型 | 改 `ICS_MODEL_*` 环境变量 | 否 |
+| 加一个 Agent | 加 `agents/xxx.yaml` | 否 |
+| 改提示词 | 加 `prompts/xxx.v2.md`，改 `prompt_ref` | 否 |
+| 加一个知识库 | 调用摄取接口传新 `kb_id` | 否 |
+| 加一个租户 | 首次写入自动建分区 | 否 |
+| 加一个工具 | 在 `api/tools_builtin.py` 注册 | 是（仅此一项） |
 
-### 快速启动
+## 变更面与爆炸半径
 
-```bash
-# 1. 克隆项目
-git clone <repository-url>
-cd intelligent-customer-service
+| 换掉什么 | 影响 | 成本 |
+|---|---|---|
+| MCP 协议版本 | `tools/mcp_client.py` | 1 个文件 |
+| 编排框架 | `agent/engine.py` + `patterns/` | 2~4 周 |
+| 模型厂商 | `model/registry.py` + 环境变量 | 1 天 |
+| 向量库 | `rag/index/store.py` | 1 周 |
+| 可观测后端 | 改 OTLP endpoint | ≈ 0 |
+| **嵌入模型** | **全量重建索引** | **最贵** |
 
-# 2. 启动中间件 (基础设施)
-docker-compose -f docker-compose.infra.yml up -d
-
-# 3. 等待中间件就绪 (约 60 秒)
-sleep 60
-
-# 4. 启动微服务
-docker-compose -f docker-compose.services.yml up -d
-
-# 5. 启动智能体 (可选)
-docker-compose -f docker-compose.agents.yml up -d
-
-# 6. 启动前端
-cd frontend && npm install && npm run dev
-```
-
-### 中间件部署
-
-#### Docker Compose 方式 (推荐)
+这张表可以 grep 验证真伪，不是口头承诺：
 
 ```bash
-# 启动所有中间件
-docker-compose -f docker-compose.infra.yml up -d
-
-# 查看状态
-docker-compose -f docker-compose.infra.yml ps
-
-# 查看日志
-docker-compose -f docker-compose.infra.yml logs -f
-
-# 停止服务
-docker-compose -f docker-compose.infra.yml down
-```
-
-#### 手动启动方式
-
-```bash
-# Nacos (服务发现)
-docker run -d --name nacos \
-  -p 8848:8848 -p 9848:9848 -p 9849:9849 \
-  -e MODE=standalone \
-  nacos/nacos-server:v2.3.0
-
-# Redis (缓存)
-docker run -d --name redis \
-  -p 6379:6379 \
-  redis:7-alpine
-
-# Milvus (向量数据库)
-docker run -d --name milvus \
-  -p 19530:19530 -p 9091:9091 \
-  milvusdb/milvus:v2.3.3 milvus run standalone
-
-# Elasticsearch (全文检索)
-docker run -d --name elasticsearch \
-  -p 9200:9200 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  elasticsearch:8.5.0
-
-# PostgreSQL (数据库)
-docker run -d --name postgres \
-  -p 5432:5432 \
-  -e POSTGRES_USER=ics \
-  -e POSTGRES_PASSWORD=ics_password \
-  -e POSTGRES_DB=ics_db \
-  postgres:15-alpine
-```
-
-#### 健康检查
-
-```bash
-# Nacos
-curl http://localhost:8848/nacos/v1/console/health/readiness
-
-# Redis
-redis-cli ping
-
-# Milvus
-curl http://localhost:9091/healthz
-
-# Elasticsearch
-curl http://localhost:9200/_cluster/health
-
-# PostgreSQL
-pg_isready -h localhost -p 5432
-```
-
-### 微服务部署
-
-#### Docker Compose 方式 (推荐)
-
-```bash
-# 确保中间件已启动
-docker-compose -f docker-compose.infra.yml ps
-
-# 启动所有微服务
-docker-compose -f docker-compose.services.yml up -d
-
-# 查看服务状态
-docker-compose -f docker-compose.services.yml ps
-
-# 查看日志
-docker-compose -f docker-compose.services.yml logs -f api-gateway
-docker-compose -f docker-compose.services.yml logs -f single-agent-service
-```
-
-#### 本地开发方式
-
-```bash
-# 配置环境变量
-export NACOS_SERVER_ADDRESSES=localhost:8848
-export LLM_PROVIDER=ollama
-export LLM_BASE_URL=http://localhost:11434
-export LLM_MODEL=qwen2.5:7b
-
-# 启动各服务 (不同终端)
-cd services/api_gateway && python run.py
-cd services/mcp_service && python run.py
-cd services/rag_service && python run.py
-cd services/memory_service && python run.py
-cd services/single_agent_service && python run.py
-cd services/multi_agent_service && python run.py
-cd services/llm_manager_service && python run.py
-cd services/evaluation_service && python run.py
-cd services/monitoring_service && python run.py
-
-# 或使用启动脚本
-./services/run_service.sh all
-```
-
-#### 服务配置
-
-每个服务目录下有 `.env.example` 文件，复制并配置：
-
-```bash
-# 服务通用配置
-SERVICE_NAME=api-gateway
-SERVICE_HOST=0.0.0.0
-HTTP_PORT=8000
-
-# Nacos 配置
-NACOS_SERVER_ADDRESSES=localhost:8848
-NACOS_NAMESPACE=public
-NACOS_GROUP=DEFAULT_GROUP
-NACOS_ENABLED=true
-
-# LLM 配置
-LLM_PROVIDER=ollama
-LLM_BASE_URL=http://localhost:11434
-LLM_MODEL=qwen2.5:7b
-LLM_API_KEY=
-
-# 数据库配置
-REDIS_URL=redis://localhost:6379
-ELASTICSEARCH_URL=http://localhost:9200
-MILVUS_HOST=localhost
-MILVUS_PORT=19530
-```
-
-### 智能体部署
-
-#### Docker Compose 方式
-
-```bash
-# 启动所有智能体
-docker-compose -f docker-compose.agents.yml up -d
-
-# 启动特定智能体
-docker-compose -f docker-compose.agents.yml up -d travel-assistant billing-advisor
-
-# 查看智能体状态
-docker-compose -f docker-compose.agents.yml ps
-
-# 验证智能体 Agent Card
-curl http://localhost:9101/.well-known/agent.json
-curl http://localhost:9002/.well-known/agent.json
-```
-
-#### 本地启动方式
-
-```bash
-cd services/agents_service
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动所有智能体
-./start_all.sh
-
-# 启动单个智能体
-python run_agent.py travel_assistant
-python run_agent.py billing_advisor --port 9003
+uv run lint-imports                                      # 四条契约
+grep -rn '^from mcp\|^import mcp' src/ | grep -v mcp_client   # 应只剩 mcp_servers
 ```
 
 ---
 
-## 业务流程
+## 三层稳定性
 
-### 单智能体对话流程
+🔴 **LLM 应用的失效大多不是崩溃，而是静默劣化。** 所以除传统可用性外必须加两层：
 
-```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                            单智能体对话流程                                      │
-└────────────────────────────────────────────────────────────────────────────────┘
-
-用户输入
-    │
-    ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ API Gateway │────►│Single Agent │────►│Memory Service│
-│             │     │   Service   │     │  (上下文)    │
-└─────────────┘     └──────┬──────┘     └─────────────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         ▼                 ▼                 ▼
-    ┌─────────┐       ┌─────────┐       ┌─────────┐
-    │  意图   │       │  快速   │       │  工具   │
-    │  识别   │       │  响应   │       │  调用   │
-    └────┬────┘       └────┬────┘       └────┬────┘
-         │                 │                 │
-         ▼                 ▼                 ▼
-    ┌─────────┐       直接返回        ┌─────────────┐
-    │ 需要RAG │       问候语          │ MCP Service │
-    └────┬────┘                       │  执行工具   │
-         │                            └──────┬──────┘
-         ▼                                   │
-    ┌─────────────┐                          │
-    │ RAG Service │◄─────────────────────────┘
-    │ 知识检索    │
-    └──────┬──────┘
-           │
-           ▼
-    ┌─────────────┐     ┌─────────────┐
-    │ LLM Manager │────►│  生成回复   │
-    │ 调用模型    │     │  流式输出   │
-    └─────────────┘     └─────────────┘
-```
-
-**ReAct 推理循环：**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Think (思考)  →  Act (行动)  →  Observe (观察)  →  Repeat     │
-│                                                                 │
-│  最多 5 次迭代，每次迭代包含：                                   │
-│  1. 分析用户意图和当前状态                                       │
-│  2. 决定是否调用工具                                            │
-│  3. 执行工具并观察结果                                          │
-│  4. 决定继续推理或生成最终回复                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 多智能体协作流程
-
-```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                           多智能体协作流程                                       │
-└────────────────────────────────────────────────────────────────────────────────┘
-
-                              用户请求
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │  Multi Agent    │
-                        │    Service      │
-                        └────────┬────────┘
-                                 │
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-               ┌────────┐  ┌────────┐  ┌────────┐
-               │  AUTO  │  │PARALLEL│  │SEQUENTIAL│
-               │ 自动   │  │ 并行   │  │ 串行    │
-               └───┬────┘  └───┬────┘  └────┬────┘
-                   │           │            │
-                   ▼           │            │
-          ┌─────────────┐      │            │
-          │ 意图识别    │      │            │
-          │ 关键词匹配  │      │            │
-          └──────┬──────┘      │            │
-                 │             │            │
-                 ▼             ▼            ▼
-          ┌─────────────────────────────────────────────────────┐
-          │                 A2A 智能体池                         │
-          │  ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐           │
-          │  │出行   │ │充电   │ │费用   │ │故障   │ ... (8个) │
-          │  │助手   │ │管家   │ │顾问   │ │急救   │           │
-          │  └───────┘ └───────┘ └───────┘ └───────┘           │
-          └─────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │  结果聚合/编排  │
-                        └────────┬────────┘
-                                 │
-                                 ▼
-                           最终响应
-```
-
-**路由模式：**
-
-| 模式 | 说明 | 使用场景 |
-|------|------|----------|
-| **AUTO** | 根据关键词自动路由到单个智能体 | 用户问题明确属于某个领域 |
-| **PARALLEL** | 同时调用多个智能体 | 问题涉及多个领域，需要综合信息 |
-| **SEQUENTIAL** | 按顺序链式调用智能体 | 问题需要多步处理，后续依赖前序结果 |
-
-### RAG 检索流程
-
-```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                             RAG 检索流程                                        │
-└────────────────────────────────────────────────────────────────────────────────┘
-
-用户查询
-    │
-    ▼
-┌─────────────────┐
-│  Query Transform │  ← HyDE (假设文档嵌入) / Query Expansion (可选)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Hybrid Retrieval                            │
-│  ┌─────────────────────────┐  ┌─────────────────────────────┐   │
-│  │   Milvus (向量检索)      │  │  Elasticsearch (BM25)       │   │
-│  │   语义相似度匹配         │  │  关键词匹配                  │   │
-│  │   Weight: 0.7            │  │  Weight: 0.3                │   │
-│  └───────────┬─────────────┘  └───────────────┬─────────────┘   │
-│              │                                │                  │
-│              └──────────────┬─────────────────┘                  │
-│                             │                                    │
-│                             ▼                                    │
-│                    ┌─────────────────┐                          │
-│                    │  RRF 融合算法   │                          │
-│                    │  score = Σ w/(60+rank)                     │
-│                    └─────────────────┘                          │
-└─────────────────────────────┬───────────────────────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │  Jina Reranker  │  ← 神经网络重排序
-                    │  Top-N 筛选     │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  Post-process   │  ← 去重 (>95% 相似度) + MMR
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  LLM 生成回复   │  ← 基于检索结果
-                    └─────────────────┘
-```
-
-**RAG 配置选项：**
-
-| 功能 | 环境变量 | 默认值 | 说明 |
-|------|----------|--------|------|
-| HyDE | `RAG_ENABLE_HYDE` | false | 假设文档嵌入 (耗时) |
-| Query Expansion | `RAG_ENABLE_QUERY_EXPANSION` | false | 查询扩展 |
-| Hybrid Retrieval | `RAG_ENABLE_HYBRID` | true | 混合检索 |
-| Reranker | `RAG_ENABLE_RERANK` | true | 神经网络重排序 |
-| Semantic Dedup | `RAG_ENABLE_DEDUP` | true | 语义去重 |
+| 层 | 手段 | 最易漏的告警（都不报错） |
+|---|---|---|
+| 可用性稳定 | `/health` 不查依赖、`/ready` 查、熔断、重试 | — |
+| **质量稳定** | evals 进 CI、发布门槛、召回率基线定时比对 | **召回率基线下降** |
+| **成本稳定** | 预算熔断、缓存命中率监控 | **降级触发次数**、**缓存命中率突降** |
 
 ---
 
-## 服务详情
-
-### API Gateway (端口 8000)
-
-统一请求入口，负责：
-- 请求路由与转发
-- 服务发现 (通过 Nacos)
-- 负载均衡
-- 认证鉴权
-- 限流熔断
+## 快速开始
 
 ```bash
-# 健康检查
-curl http://localhost:8000/health
+cp .env.example .env
+docker compose up -d
+docker compose exec ollama ollama pull bge-m3    # 首次必须，约 1.2GB
 
-# 系统信息
-curl http://localhost:8000/api/system/info
+curl localhost:8000/health
+curl localhost:8000/ready
 ```
 
-### RAG Service (端口 8002)
-
-知识检索与文档处理：
-- 文档上传与分块 (PDF/Word/Excel/Markdown)
-- 向量化存储 (Milvus)
-- 混合检索 (Vector + BM25)
-- 重排序与后处理
+本地开发：
 
 ```bash
-# 知识搜索
-curl -X POST http://localhost:8002/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "退款政策", "top_k": 5}'
-
-# 文档上传
-curl -X POST http://localhost:8002/upload \
-  -F "file=@document.pdf"
+uv sync --extra dev
+docker compose up -d postgres redis ollama
+uv run ics-api
 ```
 
-### Memory Service (端口 8010)
-
-对话记忆管理：
-- 短期记忆 (Redis) - 会话上下文
-- 长期记忆 (PostgreSQL) - 用户偏好、历史摘要
-- 记忆检索与更新
+冒烟（🔴 所有业务请求都必须带 `X-Tenant-Id`，否则 400）：
 
 ```bash
-# 创建会话
-curl -X POST http://localhost:8010/conversations
+curl -X POST localhost:8000/knowledge/documents \
+  -H 'Content-Type: application/json' -H 'X-Tenant-Id: demo' \
+  -d '{"doc_id":"faq-1","text":"充电订单的退款一般在 3 个工作日内原路返回。"}'
 
-# 获取记忆
-curl http://localhost:8010/conversations/{id}/messages
-```
-
-### Single Agent Service (端口 8005)
-
-单智能体对话服务：
-- ReAct 推理引擎
-- 工具调用 (MCP)
-- 流式响应
-- 上下文管理
-
-```bash
-# 对话请求
-curl -X POST http://localhost:8005/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "你好", "conversation_id": "xxx"}'
-```
-
-### Multi Agent Service (端口 8006)
-
-多智能体协调服务：
-- A2A 协议通信
-- 智能路由
-- 并行/串行调度
-- 结果聚合
-
-```bash
-# A2A 对话
-curl -X POST http://localhost:8006/a2a/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "附近充电站", "mode": "auto"}'
-
-# 并行调用
-curl -X POST http://localhost:8006/a2a/chat/parallel \
-  -H "Content-Type: application/json" \
-  -d '{"message": "问题", "agents": ["agent1", "agent2"]}'
-```
-
-### LLM Manager Service (端口 8007)
-
-LLM 模型管理：
-- 多模型支持 (Ollama/OpenAI/Claude/DeepSeek/通义千问)
-- 模型切换
-- 配置管理
-- Embedding 服务
-
-```bash
-# 获取可用模型
-curl http://localhost:8007/models
-
-# 切换模型
-curl -X POST http://localhost:8007/config \
-  -H "Content-Type: application/json" \
-  -d '{"provider": "ollama", "model": "qwen2.5:7b"}'
+curl -X POST localhost:8000/chat \
+  -H 'Content-Type: application/json' -H 'X-Tenant-Id: demo' \
+  -d '{"message":"退款多久到账？"}'
 ```
 
 ---
 
-## API 接口
+## API
 
-### 对话接口
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/chat` | 对话。不指定 `agent_id` 时自动分派 |
+| POST | `/chat/stream` | SSE 流式 |
+| GET | `/chat/agents` | Agent 列表 |
+| GET/DELETE | `/chat/conversations[/{id}]` | 会话列表 / 详情 / 删除 |
+| POST | `/knowledge/retrieve` | 混合检索 |
+| POST | `/knowledge/documents[/upload]` | 摄取（按内容指纹增量去重） |
+| GET | `/knowledge/stats` | 文档量与最近召回率 |
+| GET/POST | `/pending[/{id}]` | 待确认写操作 |
+| GET | `/memories` | 长期记忆 |
+| GET | `/system/info` · `/metrics` · `/health` · `/ready` | 运维 |
 
-```http
-# 单智能体对话
-POST /api/chat/message
-{
-  "message": "如何申请退款？",
-  "conversation_id": "optional",
-  "use_rag": true,
-  "stream": true
-}
+---
 
-# 多智能体对话
-POST /api/a2a/chat
-{
-  "message": "附近有什么充电站？",
-  "mode": "auto",
-  "conversation_id": "optional"
-}
+## 前端
 
-# 并行调用
-POST /api/a2a/chat/parallel
-{
-  "message": "综合问题",
-  "agents": ["agent1", "agent2"]
-}
+React 19 + Vite 8 + Tailwind 4 + TypeScript 5.9，不用 axios
+（SSE over POST 必须靠 fetch + ReadableStream，axios 在浏览器里做不了流式）。
 
-# 串行调用
-POST /api/a2a/chat/sequential
-{
-  "message": "需要多步处理的问题",
-  "agents": ["agent1", "agent2", "agent3"]
-}
+```
+frontend/src/
+├── lib/      http（租户头注入 · 错误归一 · SSE 分片重组）· errors · tenant
+│             reasoning（拆 <think> 思维链）· nodes（图节点名 → 可读标签）
+├── api/      types（后端响应形状镜像）· chat · knowledge · ops
+├── hooks/    useChat（流式 + 可中断）· useIdentity · useAsync
+└── components/  chat/ · knowledge/ · ops/ · ui/
 ```
 
-### 知识库接口
+三个必须知道的约定：
 
-```http
-# 搜索
-POST /api/knowledge/search
-{"query": "退款政策", "top_k": 5}
+| | 说明 |
+|---|---|
+| **租户** | 🔴 每个请求都带 `X-Tenant-Id`，后端 fail-closed。没设租户时前端先渲染设置页，不发注定 400 的请求 |
+| **路径** | 前端统一打 `/api/*`，由 vite 代理与 nginx 剥掉前缀。后端接口在根路径，带前缀直连是 404 |
+| **SSE** | nginx 必须 `proxy_buffering off` + `chunked_transfer_encoding off`，否则 token 被攒着一次性吐出 |
 
-# 上传文档
-POST /api/knowledge/upload
-Content-Type: multipart/form-data
-file: <文件>
-
-# 高级搜索
-POST /api/knowledge/search-advanced
-{"query": "退款政策", "filters": {...}}
-```
-
-### 记忆接口
-
-```http
-# 创建会话
-POST /api/memory/conversations
-
-# 获取会话列表
-GET /api/memory/conversations
-
-# 获取会话消息
-GET /api/memory/conversations/{id}/messages
-
-# 添加消息
-POST /api/memory/conversations/{id}/messages
-{"role": "user", "content": "消息内容"}
-
-# 获取用户偏好
-GET /api/memory/users/{user_id}/preferences
-
-# 更新用户偏好
-PUT /api/memory/users/{user_id}/preferences
-{"key": "value"}
-```
-
-### 系统接口
-
-```http
-# 健康检查
-GET /api/system/health
-
-# 系统信息
-GET /api/system/info
-
-# 服务状态
-GET /api/services/status
-
-# 模型配置
-GET /api/config/providers
-POST /api/config/switch
-{"provider": "ollama", "model": "qwen2.5:7b"}
+```bash
+cd frontend
+npm install
+npm run dev        # 3000，代理到 localhost:8000
+npm test           # 14 个用例
+npm run build
 ```
 
 ---
 
-## 开发指南
-
-### 项目结构
-
-```
-intelligent-customer-service/
-├── frontend/                     # 前端 (React + TypeScript)
-│   ├── src/
-│   │   ├── components/           # UI 组件
-│   │   │   ├── ChatMessage.tsx
-│   │   │   ├── KnowledgePanel.tsx
-│   │   │   ├── MemoryPanel.tsx
-│   │   │   ├── MultiAgentPanel.tsx
-│   │   │   ├── ServiceStatusDashboard.tsx
-│   │   │   └── MonitoringDashboard.tsx
-│   │   ├── hooks/                # 自定义 Hooks
-│   │   │   ├── useAgentChat.ts
-│   │   │   └── useMultiAgentChat.ts
-│   │   ├── services/             # API 服务
-│   │   │   └── api.ts
-│   │   └── App.tsx
-│   └── package.json
-│
-├── services/                     # 微服务
-│   ├── api_gateway/              # API 网关 (Port 8000)
-│   │   ├── app.py
-│   │   ├── routes/
-│   │   └── run.py
-│   │
-│   ├── mcp_service/              # MCP 工具服务 (Port 8001)
-│   │   ├── server.py
-│   │   └── tools/
-│   │
-│   ├── rag_service/              # RAG 服务 (Port 8002)
-│   │   ├── server.py
-│   │   ├── pipeline/
-│   │   │   ├── hybrid_retriever.py
-│   │   │   ├── reranker.py
-│   │   │   └── query_engine.py
-│   │   └── service.py
-│   │
-│   ├── evaluation_service/       # 评估服务 (Port 8003)
-│   ├── monitoring_service/       # 监控服务 (Port 8004)
-│   ├── single_agent_service/     # 单智能体服务 (Port 8005)
-│   ├── multi_agent_service/      # 多智能体服务 (Port 8006)
-│   ├── llm_manager_service/      # LLM 管理服务 (Port 8007)
-│   ├── memory_service/           # 记忆服务 (Port 8010)
-│   │   ├── memory.py
-│   │   ├── server.py
-│   │   └── service.py
-│   │
-│   ├── agents_service/           # A2A 智能体
-│   │   ├── common/               # 共享代码
-│   │   ├── travel_assistant/     # 出行助手 (Port 9101)
-│   │   ├── charging_manager/     # 充电管家 (Port 9002)
-│   │   ├── billing_advisor/      # 费用顾问 (Port 9003)
-│   │   ├── emergency_support/    # 故障急救 (Port 9004)
-│   │   ├── data_analyst/         # 数据分析师 (Port 9005)
-│   │   ├── maintenance_expert/   # 运维专家 (Port 9006)
-│   │   ├── energy_advisor/       # 能源顾问 (Port 9007)
-│   │   └── scheduling_advisor/   # 调度顾问 (Port 9008)
-│   │
-│   └── common/                   # 公共模块
-│       ├── config.py             # 配置管理
-│       ├── nacos_client.py       # Nacos 客户端
-│       ├── http_client.py        # HTTP 客户端
-│       └── logging.py            # 日志配置
-│
-├── docker-compose.infra.yml      # 中间件部署
-├── docker-compose.services.yml   # 微服务部署
-├── docker-compose.agents.yml     # 智能体部署
-└── README.md
-```
-
-### 添加新服务
-
-1. 创建服务目录：
+## 开发
 
 ```bash
-mkdir -p services/new_service
-cd services/new_service
+uv run ruff check src tests evals
+uv run lint-imports              # 四条架构契约
+uv run pytest -q                 # 108 个用例
+uv run python evals/run_eval.py --tenant demo --dataset evals/datasets/golden_v1.jsonl
 ```
 
-2. 创建服务代码：
+### 测试守的是「静默失败」
 
-```python
-# services/new_service/server.py
-from fastapi import FastAPI
-from services.common.fastapi_nacos import NacosMiddleware
+不报错、只是悄悄变坏的地方才值得写测试：
 
-app = FastAPI(title="New Service")
+| 文件 | 守的失败模式 |
+|---|---|
+| `test_core.py` | fail-open 租户、推理/缓存 token 混算、错误码漏翻译、跨线程租户串味 |
+| `test_model.py` | 别名静默重定向、推理模型返回空串、弃用端点、静默截断、维度漂移 |
+| `test_rag.py` | 加权求和让量纲支配排序、中文不分词 BM25 全 0、间接提示注入、二进制当文本入库 |
+| `test_guard_agent.py` | 无步数上限、写操作绕过闸门、中文 PII 漏检、Agent 硬编码进代码 |
+| `test_architecture.py` | 分层违规、死配置、死依赖、提示词内联、ContextVar 复活 |
 
-# 添加 Nacos 中间件
-app.add_middleware(NacosMiddleware, service_name="new-service")
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
-@app.post("/api/endpoint")
-async def endpoint():
-    return {"result": "..."}
-```
-
-3. 配置环境变量：
-
-```bash
-# .env
-SERVICE_NAME=new-service
-HTTP_PORT=8xxx
-NACOS_SERVER_ADDRESSES=localhost:8848
-```
-
-4. 添加到 docker-compose：
-
-```yaml
-new-service:
-  build:
-    context: .
-    dockerfile: services/new_service/Dockerfile
-  ports:
-    - "8xxx:8xxx"
-  environment:
-    SERVICE_NAME: new-service
-```
-
-### 添加新智能体
-
-1. 创建智能体目录：
-
-```bash
-mkdir -p services/agents_service/new_agent
-```
-
-2. 实现执行器：
-
-```python
-# services/agents_service/new_agent/executor.py
-from services.agents_service.common.base_executor import BaseExecutor
-
-class NewAgentExecutor(BaseExecutor):
-    def __init__(self):
-        super().__init__(
-            name="new_agent",
-            description="新智能体描述"
-        )
-
-    async def execute(self, message: str, context: dict) -> str:
-        # 实现业务逻辑
-        return "响应结果"
-```
-
-3. 注册到 A2A 系统。
+前端测试守的是流式边界：租户头注入、错误契约还原、取消传播、
+**SSE 事件被网络分片切断后能否拼回**、**思维链标签未闭合时答案不能漏出**。
 
 ---
 
-## 常见问题
+## 运维要点
 
-### 服务无法启动
+### 召回率巡检（必做）
 
-```bash
-# 检查 Nacos 连接
-curl http://localhost:8848/nacos/v1/console/health/readiness
-
-# 检查端口占用
-lsof -i :8000
-
-# 查看服务日志
-docker-compose -f docker-compose.services.yml logs -f api-gateway
-```
-
-### 中间件连接失败
+🔴 HNSW 索引退化**完全无声**：不报错、不变慢，只是开始漏结果。
 
 ```bash
-# 检查中间件状态
-docker-compose -f docker-compose.infra.yml ps
-
-# 重启中间件
-docker-compose -f docker-compose.infra.yml restart
-
-# 检查网络连接
-docker network ls | grep ics
+uv run ics-recall-probe --tenant demo     # 建议挂每日定时任务，非 0 退出即告警
 ```
 
-### RAG 检索不准确
+处理顺序：① 调大 `ICS_RETRIEVAL__HNSW_EF_SEARCH` ② 确认迭代扫描已开
+③ `REINDEX INDEX CONCURRENTLY` **再** `VACUUM`（HNSW 的 VACUUM 很慢，顺序别反）。
 
-```bash
-# 调整检索权重
-RAG_VECTOR_WEIGHT=0.7
-RAG_BM25_WEIGHT=0.3
+### 换嵌入模型
 
-# 启用重排序
-RAG_ENABLE_RERANK=true
+🔴 **本领域最危险的变更**。维度与语义空间都会变：
 
-# 调整返回数量
-RAG_RETRIEVAL_TOP_K=10
-RAG_FINAL_TOP_K=5
-```
+1. 改 `ICS_MODEL_EMBED_MAIN` 与 `model/registry.py` 的 `dimensions` / `max_input_tokens`
+2. 改 `deploy/postgres/init.sql` 的 `vector(N)`
+3. **重建全部向量** —— 只改配置不重建，检索断崖下跌且不报错
 
-### 智能体通信失败
+### 批量导入
 
-```bash
-# 检查智能体状态
-curl http://localhost:9101/.well-known/agent.json
-
-# 检查 A2A 健康状态
-curl http://localhost:8006/a2a/health
-
-# 查看智能体日志
-docker-compose -f docker-compose.agents.yml logs -f travel-assistant
-```
-
-### 性能优化
-
-```bash
-# 启用 Redis 缓存
-REDIS_CACHE_ENABLED=true
-
-# 增加并发数
-EMBEDDING_MAX_CONCURRENT=20
-
-# 减少检索数量
-RAG_RETRIEVAL_TOP_K=5
-
-# 禁用耗时功能
-RAG_ENABLE_HYDE=false
-RAG_ENABLE_QUERY_EXPANSION=false
-```
+顺序不能反：`COPY ... WITH (FORMAT BINARY)` → 调大 `maintenance_work_mem` → `CREATE INDEX CONCURRENTLY`。
 
 ---
 
-## License
+## 演进阶段
 
-MIT License
+当前停在**阶段一（单体 + 独立 MCP Server）**，这对 90% 的项目是正确的。
+后续每一步都应由具体信号触发，而不是提前拆：
 
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
+| 阶段 | 触发信号 |
+|---|---|
+| 拆 worker | 摄取任务阻塞在线请求 |
+| 拆推理服务 | 🔴 进程内加载模型 = 副本数 × 模型内存 |
+| 拆 MCP | 工具需要独立发布节奏 |
+| 定义态平台化 | 多团队并行维护 Agent |

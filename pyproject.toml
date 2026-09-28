@@ -1,12 +1,114 @@
 [project]
 name = "intelligent-customer-service"
-version = "0.1.0"
-description = "Add your description here"
-requires-python = ">=3.13"
+version = "2.0.0"
+description = "企业级智能客服平台：RAG 检索 + 智能体编排 + MCP 工具，基于 LangChain 1.x / LangGraph 1.x / pgvector"
+readme = "README.md"
+# 🔴 3.12 是当前唯一全兼容版本：多个生态包封顶 <3.14，3.13 上 crewai/outlines/nemoguardrails 等装不上。
+requires-python = ">=3.12,<3.13"
+
 dependencies = [
-    "fastapi>=0.128.0",
-    "llama-index-core>=0.14.12",
-    "myapplication>=0.1.0",
+    # ---- Web / 服务框架 ----
+    "fastapi>=0.141.0",
+    "uvicorn[standard]>=0.40.0",
+    "pydantic>=2.13.0",
     "pydantic-settings>=2.12.0",
-    "uvicorn>=0.40.0",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28.0",
+
+    # ---- 智能体编排 ----
+    "langchain>=1.4.0",
+    "langchain-core>=1.6.0",
+    "langgraph>=1.2.0",
+    "langgraph-checkpoint-postgres>=3.0.0",
+    # 按 provider 动态加载：init_chat_model 需要对应厂商包在场。
+    # openai 覆盖所有 OpenAI 兼容端点（DeepSeek 等），ollama 是本地默认。
+    # 接其他厂商时按需加 langchain-<provider>。
+    "langchain-openai>=1.1.0",
+    "langchain-ollama>=1.0.0",
+
+    # ---- 模型网关 ----
+    # 🔴 不要显式声明 openai：litellm 要求 openai>=2.20,<3，显式 pin 会导致依赖不可解。
+    "litellm>=1.103.0",
+
+    # ---- MCP ----
+    "mcp>=2.2.0",
+
+    # ---- 向量库 / 检索 ----
+    "psycopg[binary,pool]>=3.3.0",
+    "pgvector>=0.5.0",
+    "bm25s>=0.3.11",          # rank-bm25 已停更 1685 天
+    "jieba>=0.42.1",          # 🔴 中文不分词 BM25 全 0 分
+
+    # ---- 文档处理 ----
+    "chonkie>=1.7.0",
+    "pypdf>=6.0.0",
+    "python-docx>=1.2.0",
+    "beautifulsoup4>=4.13.0",
+
+    # ---- 可观测 ----
+    "prometheus-client>=0.23.0",
+    "opentelemetry-api>=1.30.0",
+    "opentelemetry-sdk>=1.30.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.30.0",
+
+    # ---- 基础设施 ----
+    "redis>=6.0.0",
+    "python-dotenv>=1.1.0",
+    "pyyaml>=6.0.2",
 ]
+
+[project.optional-dependencies]
+# 本地模型：torch 在 Intel Mac 上被厂商封顶到 2.2.2，与 Linux 生产的 2.14 不一致。
+# 因此隔离为可选 extra，核心链路默认走远程嵌入/重排，避免开发机与生产跑出不同结果。
+local-models = [
+    "sentence-transformers>=5.0.0",
+    "FlagEmbedding>=1.3.0",
+]
+eval = [
+    "ragas>=0.4.0",
+    "deepeval>=4.2.0",
+    "datasets>=4.0.0",
+]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.14.0",
+    "import-linter>=2.3",
+    "respx>=0.22.0",
+]
+
+[project.scripts]
+# 四类部署单元，各自按不同信号扩缩
+ics-api = "ics.cli:api"                  # 按 QPS
+ics-mcp = "ics.cli:mcp_server"           # 无状态可水平扩
+ics-recall-probe = "ics.cli:recall_probe"  # 定时任务
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ics"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",    # 行长交给 formatter
+    "B008",    # FastAPI 的 Depends() 默认值是惯例写法
+    "RUF001",  # 中文全角标点会被误判为易混字符
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]  # 测试里断言不可变性需要 blind except

@@ -1,0 +1,13 @@
+# 加一个 Agent = 加一个这样的文件。不改代码、不新建进程、不加端口。
+id: general
+display_name: 通用客服
+description: 处理常见咨询，覆盖账户、使用方式、故障申报等通用问题
+pattern: react
+model: chat-main
+prompt_ref: agent.general.v1
+tools: [knowledge_search, create_ticket]
+retrieval:
+  rerank_top_n: 5
+guard:
+  max_model_calls: 6
+  max_tool_calls: 8

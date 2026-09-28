@@ -1,0 +1,12 @@
+id: escalation
+display_name: 人工升级
+description: 需要人工介入的敏感操作，如退款审批、账户变更
+pattern: react
+model: chat-main
+prompt_ref: agent.escalation.v1
+tools: [knowledge_search, create_ticket, issue_refund]
+guard:
+  # issue_refund 是写操作，guard 层会把它转成待确认单；这里再挂一道框架内置闸门
+  hitl_tools: [issue_refund]
+  max_model_calls: 6
+  max_tool_calls: 6

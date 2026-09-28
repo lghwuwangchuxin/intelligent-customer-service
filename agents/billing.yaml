@@ -1,0 +1,12 @@
+id: billing
+display_name: 计费顾问
+description: 解答计费规则、账单明细、退款与优惠叠加相关问题
+pattern: react
+model: chat-main
+prompt_ref: agent.billing.v1
+tools: [knowledge_search, query_order, create_ticket]
+retrieval:
+  rerank_top_n: 8
+guard:
+  max_model_calls: 8
+  max_tool_calls: 10

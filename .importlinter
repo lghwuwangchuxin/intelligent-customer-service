@@ -1,0 +1,53 @@
+[importlinter]
+root_package = ics
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = 分层单向依赖（下层不得引用上层）
+type = layers
+layers =
+    ics.cli
+    ics.api | ics.worker | ics.mcp_servers
+    ics.agent
+    ics.rag | ics.tools | ics.memory | ics.guard
+    ics.model
+    ics.infra
+    ics.core
+
+[importlinter:contract:capability-independence]
+name = 能力层互不依赖（保住可单独评测）
+type = independence
+modules =
+    ics.rag
+    ics.tools
+    ics.memory
+    ics.guard
+
+[importlinter:contract:framework-containment]
+name = 编排框架只出现在 agent 层
+type = forbidden
+source_modules =
+    ics.core
+    ics.infra
+    ics.model
+    ics.rag
+    ics.tools
+    ics.memory
+    ics.guard
+forbidden_modules =
+    langchain
+    langgraph
+
+[importlinter:contract:mcp-containment]
+name = MCP SDK 只出现在客户端与服务端模块
+type = forbidden
+source_modules =
+    ics.core
+    ics.infra
+    ics.model
+    ics.rag
+    ics.memory
+    ics.guard
+    ics.agent
+forbidden_modules =
+    mcp

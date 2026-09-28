@@ -1,1 +1,33 @@
-/backend/logs/
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# ---- Secrets & local config ----
+.env
+.env.*
+!.env.example
+
+# ---- Runtime artifacts ----
+logs/
+*.log
+data/
+!data/.gitkeep
+
+# ---- Node / frontend ----
+node_modules/
+frontend/dist/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+
+# 工具缓存
+.import_linter_cache/
+*.tsbuildinfo

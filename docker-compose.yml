@@ -1,0 +1,78 @@
+# 两个中间件，两类应用部署单元。
+# 🔴 项目名走 .env 的 COMPOSE_PROJECT_NAME：compose v2.2.x 不支持顶层 name:
+
+services:
+  postgres:
+    # PostgreSQL 18 + pgvector 0.8（0.8 起支持迭代索引扫描，带过滤检索必需）
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: ics
+      POSTGRES_PASSWORD: ics
+      POSTGRES_DB: ics
+      # HNSW 建索引吃内存，批量导入前按需再调大
+      POSTGRES_INITDB_ARGS: "-c maintenance_work_mem=512MB -c max_parallel_maintenance_workers=4"
+    ports: ["${ICS_PG_PORT:-5433}:5432"]
+    volumes:
+      # 🔴 PG18 起挂载点改为 /var/lib/postgresql（数据落在其下的子目录），
+      #    沿用 PG<=17 的 /var/lib/postgresql/data 会让容器直接退出
+      - pgdata:/var/lib/postgresql
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ics -d ics"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    ports: ["${ICS_REDIS_PORT:-6380}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ollama:
+    # 本地嵌入。首次启动后必须拉模型：
+    #   docker compose exec ollama ollama pull bge-m3
+    # 🔴 ollama pull 偶尔卡住（字节零增长）→ kill 后重跑，会断点续传
+    image: ollama/ollama:latest
+    ports: ["${ICS_OLLAMA_PORT:-11434}:11434"]
+    volumes: [ollama:/root/.ollama]
+
+  # ── 部署单元 1：HTTP API（按 QPS 扩缩）──────────────────────
+  api:
+    build: .
+    command: ics-api
+    ports: ["${ICS_API_PORT:-8000}:8000"]
+    environment:
+      ICS_DATABASE_URL: postgresql://ics:ics@postgres:5432/ics
+      ICS_REDIS_URL: redis://redis:6379/0
+      ICS_EMBED_API_BASE: http://ollama:11434
+    env_file: [.env]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  # ── 部署单元 2：MCP Server（无状态，可水平扩）───────────────
+  mcp:
+    build: .
+    command: ics-mcp
+    # 🔴 只绑回环：对外暴露面只留 api，下游不直接开放到公网
+    ports: ["127.0.0.1:8003:8003"]
+    environment:
+      ICS_DATABASE_URL: postgresql://ics:ics@postgres:5432/ics
+      ICS_EMBED_API_BASE: http://ollama:11434
+    env_file: [.env]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  # ── 前端 ────────────────────────────────────────────────────
+  web:
+    build: ./frontend
+    ports: ["${ICS_WEB_PORT:-3000}:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  ollama:
