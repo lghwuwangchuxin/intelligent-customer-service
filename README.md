@@ -198,7 +198,7 @@ frontend/src/
 cd frontend
 npm install
 npm run dev        # 3000，代理到 localhost:8000
-npm test           # 14 个用例
+npm test           # 18 个用例
 npm run build
 ```
 
@@ -209,7 +209,7 @@ npm run build
 ```bash
 uv run ruff check src tests evals
 uv run lint-imports              # 四条架构契约
-uv run pytest -q                 # 108 个用例
+uv run pytest -q                 # 116 个用例
 uv run python evals/run_eval.py --tenant demo --dataset evals/datasets/golden_v1.jsonl
 ```
 
